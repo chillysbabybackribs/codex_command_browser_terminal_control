@@ -37,8 +37,6 @@ const taskList = document.getElementById('taskList')!;
 const logStream = document.getElementById('logStream')!;
 const taskSummary = document.getElementById('taskSummary')!;
 const layoutControls = document.getElementById('layoutControls')!;
-const browserStatusDot = document.getElementById('browserStatusDot')!;
-const terminalStatusDot = document.getElementById('terminalStatusDot')!;
 const splitLabel = document.getElementById('splitLabel')!;
 const taskCount = document.getElementById('taskCount')!;
 const termPanelDot = document.getElementById('termPanelDot')!;
@@ -53,9 +51,23 @@ const actionKindSelect = document.getElementById('actionKindSelect') as HTMLSele
 const actionPayloadInput = document.getElementById('actionPayloadInput') as HTMLInputElement;
 const actionSubmitBtn = document.getElementById('actionSubmitBtn')!;
 
-// Actions panel
-const actionsList = document.getElementById('actionsList')!;
-const actionsCount = document.getElementById('actionsCount')!;
+// Actions panels (split: active + recent)
+const activeActionsList = document.getElementById('activeActionsList')!;
+const activeActionsCount = document.getElementById('activeActionsCount')!;
+const recentActionsList = document.getElementById('recentActionsList')!;
+const recentActionsCount = document.getElementById('recentActionsCount')!;
+
+// Surface State Panel
+const browserStateStatus = document.getElementById('browserStateStatus')!;
+const browserStateUrl = document.getElementById('browserStateUrl')!;
+const browserStateTitle = document.getElementById('browserStateTitle')!;
+const browserStateLoading = document.getElementById('browserStateLoading')!;
+const browserStateBack = document.getElementById('browserStateBack')!;
+const browserStateForward = document.getElementById('browserStateForward')!;
+const terminalStateStatus = document.getElementById('terminalStateStatus')!;
+const terminalStateCommand = document.getElementById('terminalStateCommand')!;
+const terminalStateRunning = document.getElementById('terminalStateRunning')!;
+const terminalStateExitCode = document.getElementById('terminalStateExitCode')!;
 
 // ─── State ──────────────────────────────────────────────────────────────────
 
@@ -167,7 +179,77 @@ layoutControls.addEventListener('click', (e: Event) => {
   if (target.dataset.preset) workspaceAPI.applyExecutionPreset(target.dataset.preset);
 });
 
-// ─── Rendering ──────────────────────────────────────────────────────────────
+// ─── Surface State Rendering ────────────────────────────────────────────────
+
+function renderBrowserSurfaceState(state: any): void {
+  const br = state.browserRuntime;
+  if (!br) {
+    browserStateStatus.textContent = 'idle';
+    browserStateStatus.className = 'surface-state-status';
+    browserStateUrl.textContent = '-';
+    browserStateTitle.textContent = '-';
+    browserStateLoading.textContent = 'idle';
+    browserStateLoading.className = 'state-tag';
+    browserStateBack.textContent = 'back: no';
+    browserStateBack.className = 'state-tag';
+    browserStateForward.textContent = 'fwd: no';
+    browserStateForward.className = 'state-tag';
+    return;
+  }
+
+  const nav = br.navigation;
+  browserStateStatus.textContent = br.surfaceStatus;
+  browserStateStatus.className = `surface-state-status ${br.surfaceStatus}`;
+
+  browserStateUrl.textContent = nav.url || '-';
+  browserStateTitle.textContent = nav.title || '-';
+
+  browserStateLoading.textContent = nav.isLoading ? 'loading' : 'idle';
+  browserStateLoading.className = `state-tag ${nav.isLoading ? 'loading' : ''}`;
+
+  browserStateBack.textContent = `back: ${nav.canGoBack ? 'yes' : 'no'}`;
+  browserStateBack.className = `state-tag ${nav.canGoBack ? 'active' : ''}`;
+
+  browserStateForward.textContent = `fwd: ${nav.canGoForward ? 'yes' : 'no'}`;
+  browserStateForward.className = `state-tag ${nav.canGoForward ? 'active' : ''}`;
+}
+
+function renderTerminalSurfaceState(state: any): void {
+  const session = state.terminalSession?.session;
+  const cmd = state.terminalCommand;
+
+  if (!session) {
+    terminalStateStatus.textContent = 'no session';
+    terminalStateStatus.className = 'surface-state-status';
+    terminalStateCommand.textContent = '-';
+    terminalStateRunning.textContent = 'no session';
+    terminalStateRunning.className = 'state-tag';
+    terminalStateExitCode.textContent = 'exit: -';
+    terminalStateExitCode.className = 'state-tag';
+    return;
+  }
+
+  const statusLabel = session.status === 'running' ? 'ready' : session.status;
+  terminalStateStatus.textContent = statusLabel;
+  terminalStateStatus.className = `surface-state-status ${session.status === 'running' ? 'ready' : session.status === 'error' || session.status === 'exited' ? 'error' : ''}`;
+
+  if (cmd) {
+    terminalStateCommand.textContent = cmd.lastCommand || '-';
+    terminalStateRunning.textContent = cmd.isRunning ? 'running' : 'idle';
+    terminalStateRunning.className = `state-tag ${cmd.isRunning ? 'running' : ''}`;
+    const exitDisplay = cmd.lastExitCode !== null ? String(cmd.lastExitCode) : cmd.lastCommand ? 'unknown' : '-';
+    terminalStateExitCode.textContent = `exit: ${exitDisplay}`;
+    terminalStateExitCode.className = 'state-tag';
+  } else {
+    terminalStateCommand.textContent = '-';
+    terminalStateRunning.textContent = 'idle';
+    terminalStateRunning.className = 'state-tag';
+    terminalStateExitCode.textContent = 'exit: -';
+    terminalStateExitCode.className = 'state-tag';
+  }
+}
+
+// ─── Task & Log Rendering ───────────────────────────────────────────────────
 
 function renderTasks(tasks: any[], activeId: string | null): void {
   if (tasks.length === 0) { taskList.innerHTML = '<div class="empty-state">No tasks yet</div>'; return; }
@@ -203,76 +285,111 @@ function renderTerminalPanel(state: any): void {
   termPanelMeta.textContent = parts.join(' | ');
 }
 
+// ─── Action Rendering (split: active + recent) ─────────────────────────────
+
 function buildActionRowHtml(r: any): string {
-  const resultHtml = r.error
+  const errorHtml = r.error
     ? `<span class="action-result error">${escapeHtml(r.error)}</span>`
-    : r.resultSummary
-      ? `<span class="action-result">${escapeHtml(r.resultSummary)}</span>`
-      : '';
+    : '';
+  const resultHtml = !r.error && r.resultSummary
+    ? `<span class="action-result">${escapeHtml(r.resultSummary)}</span>`
+    : '';
   return `<span class="action-status-dot ${r.status}"></span>` +
     `<span class="action-target-badge ${r.target}">${r.target}</span>` +
     `<span class="action-summary">${escapeHtml(r.payloadSummary)}</span>` +
-    resultHtml +
+    resultHtml + errorHtml +
     `<span class="action-time">${formatTime(r.createdAt)}</span>`;
 }
 
-function renderActionsFull(records: any[]): void {
+function renderSplitActions(records: any[]): void {
   actionRecords = records;
-  actionsCount.textContent = String(records.length);
 
-  if (records.length === 0) {
-    actionsList.innerHTML = '<div class="empty-state">No actions yet</div>';
-    return;
-  }
+  const active = records.filter((r: any) => r.status === 'queued' || r.status === 'running');
+  const recent = records.filter((r: any) => r.status === 'completed' || r.status === 'failed');
 
-  const visible = records.slice().reverse().slice(0, 30);
-  actionsList.innerHTML = visible.map((r: any) => {
-    return `<div class="action-row status-${r.status}" data-action-id="${r.id}">` +
-      buildActionRowHtml(r) + `</div>`;
-  }).join('');
-}
+  activeActionsCount.textContent = String(active.length);
+  recentActionsCount.textContent = String(recent.length);
 
-function patchActionRow(record: any): void {
-  const existing = actionsList.querySelector(`[data-action-id="${record.id}"]`) as HTMLElement | null;
-  if (existing) {
-    // Update in place — no flash
-    existing.className = `action-row status-${record.status}`;
-    existing.innerHTML = buildActionRowHtml(record);
+  if (active.length === 0) {
+    activeActionsList.innerHTML = '<div class="empty-state">No active actions</div>';
   } else {
-    // New record — prepend (most recent first)
-    if (actionsList.querySelector('.empty-state')) {
-      actionsList.innerHTML = '';
-    }
-    const row = document.createElement('div');
-    row.className = `action-row status-${record.status}`;
-    row.setAttribute('data-action-id', record.id);
-    row.innerHTML = buildActionRowHtml(record);
-    actionsList.insertBefore(row, actionsList.firstChild);
-    // Trim to 30 visible
-    while (actionsList.children.length > 30) {
-      actionsList.removeChild(actionsList.lastChild!);
-    }
+    activeActionsList.innerHTML = active.slice().reverse().map((r: any) =>
+      `<div class="action-row status-${r.status}" data-action-id="${r.id}">${buildActionRowHtml(r)}</div>`
+    ).join('');
   }
-  actionsCount.textContent = String(actionRecords.length);
+
+  const visibleRecent = recent.slice().reverse().slice(0, 30);
+  if (visibleRecent.length === 0) {
+    recentActionsList.innerHTML = '<div class="empty-state">No recent actions</div>';
+  } else {
+    recentActionsList.innerHTML = visibleRecent.map((r: any) =>
+      `<div class="action-row status-${r.status}" data-action-id="${r.id}">${buildActionRowHtml(r)}</div>`
+    ).join('');
+  }
 }
 
-function renderBrowserStatus(state: any): void {
-  const br = state.browserRuntime;
-  if (!br) { browserStatusDot.className = 'status-dot idle'; return; }
-  const dotMap: Record<string, string> = { idle: 'idle', loading: 'running', ready: 'done', error: 'error' };
-  browserStatusDot.className = `status-dot ${dotMap[br.surfaceStatus] || 'idle'}`;
+function patchActionInSplit(record: any): void {
+  const idx = actionRecords.findIndex((r: any) => r.id === record.id);
+  if (idx >= 0) {
+    actionRecords[idx] = record;
+  } else {
+    actionRecords.push(record);
+  }
+
+  const isActive = record.status === 'queued' || record.status === 'running';
+
+  // Remove from both lists first (action may have moved from active to recent)
+  const existingActive = activeActionsList.querySelector(`[data-action-id="${record.id}"]`);
+  const existingRecent = recentActionsList.querySelector(`[data-action-id="${record.id}"]`);
+  if (existingActive) existingActive.remove();
+  if (existingRecent) existingRecent.remove();
+
+  // Insert into the correct list
+  const targetList = isActive ? activeActionsList : recentActionsList;
+
+  // Clear empty state if present
+  const emptyState = targetList.querySelector('.empty-state');
+  if (emptyState) emptyState.remove();
+
+  const row = document.createElement('div');
+  row.className = `action-row status-${record.status}`;
+  row.setAttribute('data-action-id', record.id);
+  row.innerHTML = buildActionRowHtml(record);
+  targetList.insertBefore(row, targetList.firstChild);
+
+  // Trim recent to 30 visible
+  if (!isActive) {
+    while (recentActionsList.children.length > 30) {
+      recentActionsList.removeChild(recentActionsList.lastChild!);
+    }
+  }
+
+  // Update counts
+  const activeCount = actionRecords.filter((r: any) => r.status === 'queued' || r.status === 'running').length;
+  const recentCount = actionRecords.filter((r: any) => r.status === 'completed' || r.status === 'failed').length;
+  activeActionsCount.textContent = String(activeCount);
+  recentActionsCount.textContent = String(recentCount);
+
+  // Restore empty state if list is now empty
+  if (activeActionsList.children.length === 0) {
+    activeActionsList.innerHTML = '<div class="empty-state">No active actions</div>';
+  }
+  if (recentActionsList.children.length === 0) {
+    recentActionsList.innerHTML = '<div class="empty-state">No recent actions</div>';
+  }
 }
+
+// ─── Full State Render ──────────────────────────────────────────────────────
 
 function renderState(state: any): void {
   const active = state.tasks.find((t: any) => t.id === state.activeTaskId);
   taskSummary.textContent = active ? `Active: ${active.title}` : 'No active task';
   renderTasks(state.tasks, state.activeTaskId);
   renderLogs(state.logs);
-  terminalStatusDot.className = `status-dot ${state.terminal.status}`;
   renderTerminalPanel(state);
-  renderBrowserStatus(state);
-  // Don't re-render actions from state broadcasts — the dedicated
-  // actions.onUpdate channel handles incremental updates without flashing.
+  renderBrowserSurfaceState(state);
+  renderTerminalSurfaceState(state);
+
   if (state.executionSplit) {
     const ratio = state.executionSplit.ratio;
     splitLabel.textContent = `Split: ${Math.round(ratio * 100)}/${Math.round((1 - ratio) * 100)}`;
@@ -288,18 +405,24 @@ function renderState(state: any): void {
 workspaceAPI.onStateUpdate((state: any) => renderState(state));
 
 workspaceAPI.actions.onUpdate((record: any) => {
-  const idx = actionRecords.findIndex((r: any) => r.id === record.id);
-  if (idx >= 0) {
-    actionRecords[idx] = record;
-  } else {
-    actionRecords.push(record);
-  }
-  patchActionRow(record);
+  patchActionInSplit(record);
 });
 
 workspaceAPI.browser.onStateUpdate((bs: any) => {
-  const dotMap: Record<string, string> = { idle: 'idle', loading: 'running', ready: 'done', error: 'error' };
-  browserStatusDot.className = `status-dot ${dotMap[bs.surfaceStatus] || 'idle'}`;
+  // Update browser surface state directly from browser state broadcast
+  const nav = bs.navigation;
+  browserStateStatus.textContent = bs.surfaceStatus;
+  browserStateStatus.className = `surface-state-status ${bs.surfaceStatus}`;
+  browserStateUrl.textContent = nav?.url || '-';
+  browserStateTitle.textContent = nav?.title || '-';
+  if (nav) {
+    browserStateLoading.textContent = nav.isLoading ? 'loading' : 'idle';
+    browserStateLoading.className = `state-tag ${nav.isLoading ? 'loading' : ''}`;
+    browserStateBack.textContent = `back: ${nav.canGoBack ? 'yes' : 'no'}`;
+    browserStateBack.className = `state-tag ${nav.canGoBack ? 'active' : ''}`;
+    browserStateForward.textContent = `fwd: ${nav.canGoForward ? 'yes' : 'no'}`;
+    browserStateForward.className = `state-tag ${nav.canGoForward ? 'active' : ''}`;
+  }
 });
 
 termRestartBtn.addEventListener('click', async () => { termRestartBtn.disabled = true; try { await workspaceAPI.actions.submit({ target: 'terminal', kind: 'terminal.restart', payload: {} }); } finally { termRestartBtn.disabled = false; } });
@@ -313,7 +436,7 @@ workspaceAPI.getState().then((state: any) => {
   workspaceAPI.addLog('info', 'system', 'Command Center initialized');
 });
 
-// Load recent actions
+// Load recent actions into split view
 workspaceAPI.actions.listRecent(50).then((records: any[]) => {
-  renderActionsFull(records);
+  renderSplitActions(records);
 });
