@@ -397,3 +397,105 @@ describe('SurfaceExecutionController — requiresActiveAction', () => {
     resolveFirst();
   });
 });
+
+describe('SurfaceExecutionController — integration scenarios', () => {
+  let executeFn: ReturnType<typeof vi.fn>;
+  let onFail: ReturnType<typeof vi.fn>;
+
+  it('browser: rapid navigates collapse, stop clears remainder', async () => {
+    const order: string[] = [];
+    executeFn = vi.fn();
+    onFail = vi.fn();
+    const controller = new SurfaceExecutionController('browser', executeFn, onFail);
+
+    let resolveNav1!: () => void;
+    executeFn.mockImplementationOnce(() => new Promise<void>(r => { resolveNav1 = r; }));
+    executeFn.mockResolvedValue(undefined);
+
+    const nav1 = makeAction({ id: 'nav1', kind: 'browser.navigate', payload: { url: 'https://a.com' } });
+    const nav2 = makeAction({ id: 'nav2', kind: 'browser.navigate', payload: { url: 'https://b.com' } });
+    const nav3 = makeAction({ id: 'nav3', kind: 'browser.navigate', payload: { url: 'https://c.com' } });
+    const stop = makeAction({ id: 'stop', kind: 'browser.stop' });
+
+    // nav1 runs, nav2 queued, nav3 replaces nav2
+    controller.submit(nav1, { mode: 'serialize', replacesSameKind: true });
+    controller.submit(nav2, { mode: 'serialize', replacesSameKind: true });
+    controller.submit(nav3, { mode: 'serialize', replacesSameKind: true });
+
+    expect(onFail).toHaveBeenCalledWith(nav2, 'Superseded by newer browser.navigate');
+    expect(controller.getQueueLength()).toBe(1); // only nav3
+
+    // stop clears nav3
+    controller.submit(stop, { mode: 'bypass', clearsQueue: true });
+
+    expect(onFail).toHaveBeenCalledWith(nav3, 'Cancelled by browser.stop');
+    expect(controller.getQueueLength()).toBe(0);
+
+    // stop executed immediately
+    expect(executeFn).toHaveBeenCalledWith(stop);
+
+    resolveNav1();
+  });
+
+  it('terminal: execute + write + restart sequence', async () => {
+    executeFn = vi.fn();
+    onFail = vi.fn();
+    const controller = new SurfaceExecutionController('terminal', executeFn, onFail);
+
+    let resolveExec1!: () => void;
+    executeFn.mockImplementationOnce(() => new Promise<void>(r => { resolveExec1 = r; }));
+    executeFn.mockResolvedValue(undefined);
+
+    const exec1 = makeAction({ id: 'exec1', target: 'terminal', kind: 'terminal.execute', payload: { command: 'npm test' } });
+    const exec2 = makeAction({ id: 'exec2', target: 'terminal', kind: 'terminal.execute', payload: { command: 'pwd' } });
+    const write = makeAction({ id: 'write', target: 'terminal', kind: 'terminal.write', payload: { input: 'y\n' } });
+    const restart = makeAction({ id: 'restart', target: 'terminal', kind: 'terminal.restart' });
+
+    // exec1 runs, exec2 queued
+    controller.submit(exec1, { mode: 'serialize', replacesSameKind: true });
+    controller.submit(exec2, { mode: 'serialize', replacesSameKind: true });
+
+    // write succeeds — exec1 is active
+    controller.submit(write, { mode: 'bypass', requiresActiveAction: true });
+    expect(executeFn).toHaveBeenCalledWith(write);
+
+    // restart clears exec2 from queue
+    controller.submit(restart, { mode: 'bypass', clearsQueue: true });
+    expect(onFail).toHaveBeenCalledWith(exec2, 'Cancelled by terminal.restart');
+    expect(executeFn).toHaveBeenCalledWith(restart);
+
+    resolveExec1();
+  });
+
+  it('browser and terminal controllers are independent', async () => {
+    const browserExec = vi.fn();
+    const terminalExec = vi.fn();
+    const browserFail = vi.fn();
+    const terminalFail = vi.fn();
+
+    const browserCtrl = new SurfaceExecutionController('browser', browserExec, browserFail);
+    const terminalCtrl = new SurfaceExecutionController('terminal', terminalExec, terminalFail);
+
+    let resolveBrowser!: () => void;
+    browserExec.mockImplementationOnce(() => new Promise<void>(r => { resolveBrowser = r; }));
+    terminalExec.mockResolvedValue(undefined);
+
+    const nav = makeAction({ id: 'nav', target: 'browser', kind: 'browser.navigate' });
+    const exec = makeAction({ id: 'exec', target: 'terminal', kind: 'terminal.execute', payload: { command: 'ls' } });
+
+    browserCtrl.submit(nav, SERIALIZE);
+    terminalCtrl.submit(exec, SERIALIZE);
+
+    // Both should execute — they're independent
+    expect(browserExec).toHaveBeenCalledWith(nav);
+    expect(terminalExec).toHaveBeenCalledWith(exec);
+
+    // Stopping browser doesn't affect terminal
+    const stop = makeAction({ id: 'stop', target: 'browser', kind: 'browser.stop' });
+    browserCtrl.submit(stop, BYPASS_CLEAR);
+
+    expect(terminalFail).not.toHaveBeenCalled();
+
+    resolveBrowser();
+  });
+});
