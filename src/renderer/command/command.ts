@@ -305,7 +305,7 @@ function renderSplitActions(records: any[]): void {
   actionRecords = records;
 
   const active = records.filter((r: any) => r.status === 'queued' || r.status === 'running');
-  const recent = records.filter((r: any) => r.status === 'completed' || r.status === 'failed');
+  const recent = records.filter((r: any) => r.status !== 'queued' && r.status !== 'running');
 
   activeActionsCount.textContent = String(active.length);
   recentActionsCount.textContent = String(recent.length);
@@ -366,7 +366,7 @@ function patchActionInSplit(record: any): void {
 
   // Update counts
   const activeCount = actionRecords.filter((r: any) => r.status === 'queued' || r.status === 'running').length;
-  const recentCount = actionRecords.filter((r: any) => r.status === 'completed' || r.status === 'failed').length;
+  const recentCount = actionRecords.filter((r: any) => r.status !== 'queued' && r.status !== 'running').length;
   activeActionsCount.textContent = String(activeCount);
   recentActionsCount.textContent = String(recentCount);
 
@@ -409,20 +409,7 @@ workspaceAPI.actions.onUpdate((record: any) => {
 });
 
 workspaceAPI.browser.onStateUpdate((bs: any) => {
-  // Update browser surface state directly from browser state broadcast
-  const nav = bs.navigation;
-  browserStateStatus.textContent = bs.surfaceStatus;
-  browserStateStatus.className = `surface-state-status ${bs.surfaceStatus}`;
-  browserStateUrl.textContent = nav?.url || '-';
-  browserStateTitle.textContent = nav?.title || '-';
-  if (nav) {
-    browserStateLoading.textContent = nav.isLoading ? 'loading' : 'idle';
-    browserStateLoading.className = `state-tag ${nav.isLoading ? 'loading' : ''}`;
-    browserStateBack.textContent = `back: ${nav.canGoBack ? 'yes' : 'no'}`;
-    browserStateBack.className = `state-tag ${nav.canGoBack ? 'active' : ''}`;
-    browserStateForward.textContent = `fwd: ${nav.canGoForward ? 'yes' : 'no'}`;
-    browserStateForward.className = `state-tag ${nav.canGoForward ? 'active' : ''}`;
-  }
+  renderBrowserSurfaceState({ browserRuntime: bs });
 });
 
 termRestartBtn.addEventListener('click', async () => { termRestartBtn.disabled = true; try { await workspaceAPI.actions.submit({ target: 'terminal', kind: 'terminal.restart', payload: {} }); } finally { termRestartBtn.disabled = false; } });

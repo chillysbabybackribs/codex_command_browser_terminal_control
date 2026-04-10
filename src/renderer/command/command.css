@@ -501,18 +501,3 @@
   background: rgba(238, 68, 68, 0.04);
   border-left-color: var(--accent-red);
 }
-
-.action-row.status-failed .action-error-detail {
-  display: block;
-  color: var(--accent-red);
-  font-size: 10px;
-  padding: 2px 0 0 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-}
-
-.action-error-detail {
-  display: none;
-}
