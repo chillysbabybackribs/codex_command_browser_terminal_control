@@ -7,8 +7,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 0 16px;
-  height: 36px;
+  padding: 0 12px;
+  height: 32px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
@@ -53,33 +53,6 @@
   flex-shrink: 0;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-}
-
-.terminal-session-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-}
-
-.session-label {
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-ghost);
-  font-size: 10px;
-}
-
-.session-status {
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-}
-
-.session-meta {
-  font-family: var(--font-mono);
-  color: var(--text-ghost);
 }
 
 .btn-sm {
@@ -201,6 +174,85 @@
 .action-payload-input:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* ── Tab Picker (dropdown for Close Tab / Switch Tab) ────────────────── */
+
+.action-tab-picker {
+  flex: 1;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 4px 8px;
+  height: 26px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.action-tab-picker:focus {
+  border-color: var(--border-active);
+}
+
+.action-tab-picker option {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.action-tab-picker:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Tab ID Chips (in browser state panel) ───────────────────────────── */
+
+.tab-id-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.tab-id-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 2px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+  white-space: nowrap;
+}
+
+.tab-id-chip:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  border-color: var(--border-hover);
+}
+
+.tab-id-chip.active {
+  color: var(--accent-green);
+  border-color: rgba(0, 212, 123, 0.25);
+  background: rgba(0, 212, 123, 0.06);
+}
+
+.tab-id-chip.copied {
+  color: var(--accent-green);
+  border-color: rgba(0, 212, 123, 0.4);
+}
+
+.tab-id-chip code {
+  font-size: 9px;
+  color: var(--text-ghost);
+  opacity: 0.7;
 }
 
 /* ── Actions Panel ────────────────────────────────────────────────────── */
@@ -480,7 +532,7 @@
   border-color: rgba(255, 149, 0, 0.2);
 }
 
-.state-tag.running {
+.state-tag.dispatching {
   color: var(--accent-orange);
   border-color: rgba(255, 149, 0, 0.2);
 }
@@ -500,4 +552,172 @@
 .action-row.status-failed {
   background: rgba(238, 68, 68, 0.04);
   border-left-color: var(--accent-red);
+}
+
+/* ── App Shell (flex-row wrapper) ────────────────────────────────────── */
+
+.app-shell {
+  display: flex;
+  flex-direction: row;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-shell > .window-container {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Log Sidebar ─────────────────────────────────────────────────────── */
+
+.log-sidebar {
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  border-left: 1px solid var(--border);
+  transition: width var(--duration-normal) var(--ease-out),
+              min-width var(--duration-normal) var(--ease-out);
+  flex-shrink: 0;
+}
+
+.log-sidebar.open,
+.log-sidebar.pinned {
+  width: 360px;
+  min-width: 280px;
+}
+
+.log-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  height: 36px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.log-sidebar-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-ghost);
+  font-family: var(--font-mono);
+}
+
+.log-sidebar-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.log-sidebar-controls .btn-sm {
+  padding: 2px 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  border-color: transparent;
+  background: transparent;
+}
+
+.log-sidebar-controls .btn-sm:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.log-sidebar-controls .btn-sm.active {
+  color: var(--accent-green);
+}
+
+.log-sidebar .log-stream {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* ── Sidebar Toggle (status bar) ─────────────────────────────────────── */
+
+.sidebar-toggle-btn {
+  margin-left: auto;
+  padding: 2px 8px;
+  font-size: 10px;
+  color: var(--text-muted);
+  border-color: var(--border);
+  background: var(--bg-primary);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.sidebar-toggle-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+.sidebar-toggle-btn.active {
+  color: var(--accent-green);
+  border-color: rgba(0, 212, 123, 0.25);
+  background: rgba(0, 212, 123, 0.06);
+}
+
+/* ── Collapsible Sections ────────────────────────────────────────────── */
+
+.actions-panel.collapsed > .actions-list {
+  display: none;
+}
+
+.actions-panel.collapsed {
+  max-height: none;
+}
+
+.actions-panel-header {
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--duration-fast) ease;
+}
+
+.actions-panel-header:hover {
+  background: var(--bg-hover);
+}
+
+.task-list.collapsed {
+  max-height: none;
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.task-list.collapsed > .task-item,
+.task-list.collapsed > .empty-state {
+  display: none;
+}
+
+.task-list.collapsed::before {
+  content: 'Tasks';
+  display: block;
+  padding: 4px 16px;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-ghost);
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+
+.task-list:not(.collapsed)::before {
+  content: 'Tasks';
+  display: block;
+  padding: 4px 16px;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-ghost);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
 }
