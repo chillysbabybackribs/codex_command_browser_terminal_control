@@ -12,124 +12,139 @@
   <link rel="stylesheet" href="command.css">
 </head>
 <body>
-  <div class="window-container">
-    <header class="window-header">
-      <div class="role-badge role-command"><span class="dot"></span>COMMAND CENTER</div>
-      <div class="task-summary" id="taskSummary">No active task</div>
-    </header>
+  <div class="app-shell">
+    <div class="window-container">
+      <header class="window-header">
+        <div class="role-badge role-command"><span class="dot"></span>COMMAND CENTER</div>
+        <div class="task-summary" id="taskSummary">No active task</div>
+      </header>
 
-    <!-- Surface State Panel -->
-    <div class="surface-state-panel">
-      <div class="surface-state-section browser-state">
-        <div class="surface-state-header">
-          <span class="surface-state-label">Browser</span>
-          <span class="surface-state-status" id="browserStateStatus">idle</span>
+      <!-- Surface State Panel -->
+      <div class="surface-state-panel">
+        <div class="surface-state-section browser-state">
+          <div class="surface-state-header">
+            <span class="surface-state-label">Browser</span>
+            <span class="surface-state-status" id="browserStateStatus">idle</span>
+          </div>
+          <div class="surface-state-details">
+            <div class="state-row">
+              <span class="state-key">URL</span>
+              <span class="state-value" id="browserStateUrl">-</span>
+            </div>
+            <div class="state-row">
+              <span class="state-key">Title</span>
+              <span class="state-value" id="browserStateTitle">-</span>
+            </div>
+            <div class="state-row">
+              <span class="state-key">Tabs</span>
+              <span class="state-value tab-id-list" id="browserStateTabs">-</span>
+            </div>
+            <div class="state-row state-row-inline">
+              <span class="state-tag" id="browserStateLoading">idle</span>
+              <span class="state-tag" id="browserStateBack">back: no</span>
+              <span class="state-tag" id="browserStateForward">fwd: no</span>
+            </div>
+          </div>
         </div>
-        <div class="surface-state-details">
-          <div class="state-row">
-            <span class="state-key">URL</span>
-            <span class="state-value" id="browserStateUrl">-</span>
+        <div class="surface-state-section terminal-state">
+          <div class="surface-state-header">
+            <span class="surface-state-label">Terminal</span>
+            <span class="surface-state-status" id="terminalStateStatus">no session</span>
           </div>
-          <div class="state-row">
-            <span class="state-key">Title</span>
-            <span class="state-value" id="browserStateTitle">-</span>
-          </div>
-          <div class="state-row state-row-inline">
-            <span class="state-tag" id="browserStateLoading">idle</span>
-            <span class="state-tag" id="browserStateBack">back: no</span>
-            <span class="state-tag" id="browserStateForward">fwd: no</span>
+          <div class="surface-state-details">
+            <div class="state-row">
+              <span class="state-key">Shell</span>
+              <span class="state-value" id="terminalStateShell">untracked</span>
+            </div>
+            <div class="state-row">
+              <span class="state-key">Last Dispatched</span>
+              <span class="state-value" id="terminalStateCommand">-</span>
+            </div>
+            <div class="state-row state-row-inline">
+              <span class="state-tag" id="terminalStateDispatch">no dispatch</span>
+              <span class="state-tag" id="terminalStatePid">-</span>
+              <span class="state-tag" id="terminalStateDims">-</span>
+            </div>
           </div>
         </div>
       </div>
-      <div class="surface-state-section terminal-state">
-        <div class="surface-state-header">
-          <span class="surface-state-label">Terminal</span>
-          <span class="surface-state-status" id="terminalStateStatus">no session</span>
-        </div>
-        <div class="surface-state-details">
-          <div class="state-row">
-            <span class="state-key">Command</span>
-            <span class="state-value" id="terminalStateCommand">-</span>
-          </div>
-          <div class="state-row state-row-inline">
-            <span class="state-tag" id="terminalStateRunning">idle</span>
-            <span class="state-tag" id="terminalStateExitCode">exit: -</span>
+
+      <div class="controls-bar">
+        <div class="control-group">
+          <span class="control-label">Execution Split:</span>
+          <div class="layout-controls" id="layoutControls">
+            <button class="btn active" data-preset="balanced">Balanced</button>
+            <button class="btn" data-preset="focus-browser">Browser</button>
+            <button class="btn" data-preset="focus-terminal">Terminal</button>
           </div>
         </div>
+      </div>
+
+      <!-- Action Composer -->
+      <div class="action-composer" id="actionComposer">
+        <div class="action-composer-row">
+          <div class="action-target-selector">
+            <button class="target-btn active" data-target="browser" id="targetBrowserBtn">Browser</button>
+            <button class="target-btn" data-target="terminal" id="targetTerminalBtn">Terminal</button>
+          </div>
+          <select class="action-kind-select" id="actionKindSelect">
+            <option value="browser.navigate">Navigate</option>
+          </select>
+          <input type="text" class="action-payload-input" id="actionPayloadInput" placeholder="URL..." autocomplete="off">
+          <select class="action-tab-picker" id="actionTabPicker" style="display:none"></select>
+          <button class="btn primary btn-sm" id="actionSubmitBtn">Execute</button>
+        </div>
+      </div>
+
+      <!-- Active Actions (collapsible) -->
+      <div class="actions-panel active-actions-panel collapsed" id="activeActionsPanel">
+        <div class="actions-panel-header" id="activeActionsHeader">
+          <span class="actions-title">Active Actions</span>
+          <span class="actions-count" id="activeActionsCount">0</span>
+        </div>
+        <div class="actions-list" id="activeActionsList">
+          <div class="empty-state">No active actions</div>
+        </div>
+      </div>
+
+      <!-- Recent Actions (collapsible) -->
+      <div class="actions-panel collapsed" id="recentActionsPanel">
+        <div class="actions-panel-header" id="recentActionsHeader">
+          <span class="actions-title">Recent Actions</span>
+          <span class="actions-count" id="recentActionsCount">0</span>
+        </div>
+        <div class="actions-list" id="recentActionsList">
+          <div class="empty-state">No recent actions</div>
+        </div>
+      </div>
+
+      <div class="window-body">
+        <div class="task-list collapsed" id="taskList"><div class="empty-state">No tasks yet</div></div>
+      </div>
+
+      <div class="input-area">
+        <input type="text" id="taskInput" placeholder="Enter a task..." autocomplete="off">
+        <button class="btn primary" id="submitBtn">Submit</button>
+      </div>
+
+      <div class="status-bar">
+        <div class="status-indicator"><span class="status-dot done" id="syncDot"></span><span id="syncLabel">Synced</span></div>
+        <span id="splitLabel">Split: 50/50</span>
+        <span id="taskCount">Tasks: 0</span>
+        <button class="btn btn-sm sidebar-toggle-btn" id="sidebarToggleBtn">Logs</button>
       </div>
     </div>
 
-    <div class="controls-bar">
-      <div class="control-group">
-        <span class="control-label">Execution Split:</span>
-        <div class="layout-controls" id="layoutControls">
-          <button class="btn active" data-preset="balanced">Balanced</button>
-          <button class="btn" data-preset="focus-browser">Browser</button>
-          <button class="btn" data-preset="focus-terminal">Terminal</button>
+    <!-- Log Sidebar -->
+    <div class="log-sidebar" id="logSidebar">
+      <div class="log-sidebar-header">
+        <span class="log-sidebar-title">Logs</span>
+        <div class="log-sidebar-controls">
+          <button class="btn btn-sm" id="sidebarPinBtn" title="Pin sidebar open">Pin</button>
+          <button class="btn btn-sm" id="sidebarCloseBtn" title="Close sidebar">&times;</button>
         </div>
       </div>
-      <div class="control-group">
-        <div class="terminal-session-info">
-          <span class="session-label">Terminal:</span>
-          <span class="status-dot idle" id="termPanelDot"></span>
-          <span class="session-status" id="termPanelStatus">No session</span>
-          <span class="session-meta" id="termPanelMeta"></span>
-          <button class="btn btn-sm" id="termRestartBtn">Restart</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Action Composer -->
-    <div class="action-composer" id="actionComposer">
-      <div class="action-composer-row">
-        <div class="action-target-selector">
-          <button class="target-btn active" data-target="browser" id="targetBrowserBtn">Browser</button>
-          <button class="target-btn" data-target="terminal" id="targetTerminalBtn">Terminal</button>
-        </div>
-        <select class="action-kind-select" id="actionKindSelect">
-          <option value="browser.navigate">Navigate</option>
-        </select>
-        <input type="text" class="action-payload-input" id="actionPayloadInput" placeholder="URL..." autocomplete="off">
-        <button class="btn primary btn-sm" id="actionSubmitBtn">Execute</button>
-      </div>
-    </div>
-
-    <!-- Active Actions -->
-    <div class="actions-panel active-actions-panel" id="activeActionsPanel">
-      <div class="actions-panel-header">
-        <span class="actions-title">Active Actions</span>
-        <span class="actions-count" id="activeActionsCount">0</span>
-      </div>
-      <div class="actions-list" id="activeActionsList">
-        <div class="empty-state">No active actions</div>
-      </div>
-    </div>
-
-    <!-- Recent Actions -->
-    <div class="actions-panel" id="recentActionsPanel">
-      <div class="actions-panel-header">
-        <span class="actions-title">Recent Actions</span>
-        <span class="actions-count" id="recentActionsCount">0</span>
-      </div>
-      <div class="actions-list" id="recentActionsList">
-        <div class="empty-state">No recent actions</div>
-      </div>
-    </div>
-
-    <div class="window-body">
-      <div class="task-list" id="taskList"><div class="empty-state">No tasks yet</div></div>
       <div class="log-stream" id="logStream"></div>
-    </div>
-
-    <div class="input-area">
-      <input type="text" id="taskInput" placeholder="Enter a task..." autocomplete="off">
-      <button class="btn primary" id="submitBtn">Submit</button>
-    </div>
-
-    <div class="status-bar">
-      <div class="status-indicator"><span class="status-dot done" id="syncDot"></span><span id="syncLabel">Synced</span></div>
-      <span id="splitLabel">Split: 50/50</span>
-      <span id="taskCount">Tasks: 0</span>
     </div>
   </div>
   <script type="module" src="command.js"></script>
