@@ -21,11 +21,21 @@ import { AppEventType } from '../../shared/types/events';
 import { generateId } from '../../shared/utils/ids';
 import { executeBrowserAction } from './browserActionExecutor';
 import { executeTerminalAction } from './terminalActionExecutor';
+import { SurfaceExecutionController } from './SurfaceExecutionController';
+import { ACTION_CONCURRENCY_POLICY } from './surfaceActionPolicy';
 
 const MAX_ACTIONS = 200;
 
 class SurfaceActionRouter {
-  private activeActions: Map<string, SurfaceAction> = new Map();
+  private browserController: SurfaceExecutionController;
+  private terminalController: SurfaceExecutionController;
+
+  constructor() {
+    const executeCb = (action: SurfaceAction) => this.executeAction(action);
+    const failCb = (action: SurfaceAction, reason: string) => this.failActionByPolicy(action, reason);
+    this.browserController = new SurfaceExecutionController('browser', executeCb, failCb);
+    this.terminalController = new SurfaceExecutionController('terminal', executeCb, failCb);
+  }
 
   async submit<K extends SurfaceActionKind>(input: SurfaceActionInput<K>): Promise<SurfaceActionRecord> {
     // Validate target matches kind
@@ -73,9 +83,18 @@ class SurfaceActionRouter {
       },
     });
 
-    // Track and execute
-    this.activeActions.set(action.id, action as SurfaceAction);
-    this.executeAction(action as SurfaceAction);
+    // Delegate to per-surface controller
+    const controller = action.target === 'browser' ? this.browserController : this.terminalController;
+    const policy = ACTION_CONCURRENCY_POLICY[action.kind];
+
+    try {
+      controller.submit(action as SurfaceAction, policy);
+    } catch (err: unknown) {
+      // Policy rejection (e.g., terminal.write with no active action).
+      // Record is already in state as 'queued' — transition to failed.
+      const reason = err instanceof Error ? err.message : String(err);
+      this.failActionByPolicy(action as SurfaceAction, reason);
+    }
 
     return { ...record };
   }
@@ -109,9 +128,8 @@ class SurfaceActionRouter {
       appStateStore.dispatch({
         type: ActionType.SET_TERMINAL_COMMAND,
         command: {
-          isRunning: true,
-          lastCommand: payload.command,
-          lastExitCode: null,
+          dispatched: true,
+          lastDispatchedCommand: payload.command,
           lastUpdatedAt: Date.now(),
         },
       });
@@ -135,9 +153,8 @@ class SurfaceActionRouter {
         appStateStore.dispatch({
           type: ActionType.SET_TERMINAL_COMMAND,
           command: {
-            isRunning: false,
-            lastCommand: (action.payload as { command: string }).command,
-            lastExitCode: null, // PTY does not provide per-command exit codes
+            dispatched: false,
+            lastDispatchedCommand: (action.payload as { command: string }).command,
             lastUpdatedAt: Date.now(),
           },
         });
@@ -161,14 +178,13 @@ class SurfaceActionRouter {
       this.updateRecord(id, { status: 'failed', error: errorMsg, updatedAt: Date.now() });
       eventBus.emit(AppEventType.SURFACE_ACTION_FAILED, { record: this.getCurrentRecord(id) });
 
-      // Update terminal command state on failure
+      // Update terminal command dispatch state on failure
       if (isTerminalExecute) {
         appStateStore.dispatch({
           type: ActionType.SET_TERMINAL_COMMAND,
           command: {
-            isRunning: false,
-            lastCommand: (action.payload as { command: string }).command,
-            lastExitCode: null,
+            dispatched: false,
+            lastDispatchedCommand: (action.payload as { command: string }).command,
             lastUpdatedAt: Date.now(),
           },
         });
@@ -185,9 +201,23 @@ class SurfaceActionRouter {
           taskId: action.taskId ?? undefined,
         },
       });
-    } finally {
-      this.activeActions.delete(id);
     }
+  }
+
+  private failActionByPolicy(action: SurfaceAction, reason: string): void {
+    this.updateRecord(action.id, { status: 'failed', error: reason, updatedAt: Date.now() });
+    eventBus.emit(AppEventType.SURFACE_ACTION_FAILED, { record: this.getCurrentRecord(action.id) });
+    appStateStore.dispatch({
+      type: ActionType.ADD_LOG,
+      log: {
+        id: generateId('log'),
+        timestamp: Date.now(),
+        level: 'warn',
+        source: action.target,
+        message: `Action cancelled: ${reason}`,
+        taskId: action.taskId ?? undefined,
+      },
+    });
   }
 
   private validatePayload(kind: SurfaceActionKind, payload: Record<string, unknown>): void {
