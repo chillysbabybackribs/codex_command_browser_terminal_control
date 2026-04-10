@@ -122,6 +122,7 @@ interface WorkspaceAPI {
     write(data: string): Promise<void>;
     resize(cols: number, rows: number): Promise<void>;
     restart(): Promise<TerminalSessionInfo>;
+    captureScrollback(): Promise<string>;
     onOutput(callback: (data: string) => void): void;
     onStatus(callback: (session: TerminalSessionInfo) => void): void;
     onExit(callback: (exitCode: number) => void): void;
