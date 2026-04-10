@@ -139,28 +139,30 @@ export class TerminalService {
   }
 
   waitForCommandFinish(timeoutMs: number = 10_000): Promise<CommandFinishResult | null> {
-    // If already idle with a recent exit code, resolve immediately
-    if (this.commandState.phase === 'idle' && this.commandState.lastExitCode !== null) {
-      return Promise.resolve({
-        exitCode: this.commandState.lastExitCode,
-        output: this.commandState.outputSinceCommandStart,
-        cwd: this.commandState.cwd,
-        durationMs: this.commandState.startedAt ? Date.now() - this.commandState.startedAt : 0,
-        command: '',
-      });
-    }
+    // Always wait for the next prompt-started event — never resolve with stale data.
+    // The caller writes a command to PTY before calling this, and the OSC 633;C marker
+    // may not have arrived yet. Resolving immediately with a previous command's result
+    // would be a race condition.
 
     return new Promise<CommandFinishResult | null>((resolve) => {
+      let settled = false;
+
+      const wrappedResolve = (result: CommandFinishResult) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        const idx = this.commandFinishResolvers.indexOf(wrappedResolve);
+        if (idx !== -1) this.commandFinishResolvers.splice(idx, 1);
+        resolve(result);
+      };
+
       const timer = setTimeout(() => {
-        const idx = this.commandFinishResolvers.indexOf(resolve as any);
+        if (settled) return;
+        settled = true;
+        const idx = this.commandFinishResolvers.indexOf(wrappedResolve);
         if (idx !== -1) this.commandFinishResolvers.splice(idx, 1);
         resolve(null);
       }, timeoutMs);
-
-      const wrappedResolve = (result: CommandFinishResult) => {
-        clearTimeout(timer);
-        resolve(result);
-      };
 
       this.commandFinishResolvers.push(wrappedResolve);
     });
