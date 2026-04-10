@@ -375,7 +375,7 @@ describe('SurfaceExecutionController — requiresActiveAction', () => {
     resolveExec();
   });
 
-  it('throws when only queued actions exist (no running)', async () => {
+  it('succeeds when an action is running even if others are queued', async () => {
     let resolveFirst!: () => void;
     executeFn.mockImplementationOnce(() => new Promise<void>(r => { resolveFirst = r; }));
 
