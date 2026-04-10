@@ -568,6 +568,12 @@
   min-width: 0;
 }
 
+/* Override shared .window-body flex:1 — main pane no longer has log stream,
+   so window-body should only take the space its children need */
+.app-shell .window-body {
+  flex: 0 0 auto;
+}
+
 /* ── Log Sidebar ─────────────────────────────────────────────────────── */
 
 .log-sidebar {
