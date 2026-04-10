@@ -403,7 +403,6 @@ describe('SurfaceExecutionController — integration scenarios', () => {
   let onFail: ReturnType<typeof vi.fn>;
 
   it('browser: rapid navigates collapse, stop clears remainder', async () => {
-    const order: string[] = [];
     executeFn = vi.fn();
     onFail = vi.fn();
     const controller = new SurfaceExecutionController('browser', executeFn, onFail);
