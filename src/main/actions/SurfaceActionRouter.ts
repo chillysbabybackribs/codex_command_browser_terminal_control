@@ -97,10 +97,25 @@ class SurfaceActionRouter {
 
   private async executeAction(action: SurfaceAction): Promise<void> {
     const id = action.id;
+    const isTerminalExecute = action.kind === 'terminal.execute';
 
     // Transition to running
     this.updateStatus(id, 'running');
     eventBus.emit(AppEventType.SURFACE_ACTION_STARTED, { record: this.getCurrentRecord(id) });
+
+    // Track terminal command state for terminal.execute actions
+    if (isTerminalExecute) {
+      const payload = action.payload as { command: string };
+      appStateStore.dispatch({
+        type: ActionType.SET_TERMINAL_COMMAND,
+        command: {
+          isRunning: true,
+          lastCommand: payload.command,
+          lastExitCode: null,
+          lastUpdatedAt: Date.now(),
+        },
+      });
+    }
 
     try {
       let resultSummary: string;
@@ -114,6 +129,19 @@ class SurfaceActionRouter {
       // Transition to completed
       this.updateRecord(id, { status: 'completed', resultSummary, updatedAt: Date.now() });
       eventBus.emit(AppEventType.SURFACE_ACTION_COMPLETED, { record: this.getCurrentRecord(id) });
+
+      // Update terminal command state on completion
+      if (isTerminalExecute) {
+        appStateStore.dispatch({
+          type: ActionType.SET_TERMINAL_COMMAND,
+          command: {
+            isRunning: false,
+            lastCommand: (action.payload as { command: string }).command,
+            lastExitCode: null, // PTY does not provide per-command exit codes
+            lastUpdatedAt: Date.now(),
+          },
+        });
+      }
 
       appStateStore.dispatch({
         type: ActionType.ADD_LOG,
@@ -132,6 +160,19 @@ class SurfaceActionRouter {
       // Transition to failed
       this.updateRecord(id, { status: 'failed', error: errorMsg, updatedAt: Date.now() });
       eventBus.emit(AppEventType.SURFACE_ACTION_FAILED, { record: this.getCurrentRecord(id) });
+
+      // Update terminal command state on failure
+      if (isTerminalExecute) {
+        appStateStore.dispatch({
+          type: ActionType.SET_TERMINAL_COMMAND,
+          command: {
+            isRunning: false,
+            lastCommand: (action.payload as { command: string }).command,
+            lastExitCode: null,
+            lastUpdatedAt: Date.now(),
+          },
+        });
+      }
 
       appStateStore.dispatch({
         type: ActionType.ADD_LOG,
