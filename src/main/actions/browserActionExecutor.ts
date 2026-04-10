@@ -23,6 +23,25 @@ function getDebugNavigateDelayMs(): number {
   return Number.isFinite(ms) && ms > 0 ? ms : 0;
 }
 
+function waitForBrowserLoad(timeoutMs: number = 5000): Promise<void> {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    function check(): void {
+      const state = browserService.getState();
+      if (!state.navigation.isLoading) {
+        resolve();
+        return;
+      }
+      if (Date.now() - start > timeoutMs) {
+        resolve(); // timeout — return whatever state exists
+        return;
+      }
+      setTimeout(check, 200);
+    }
+    check();
+  });
+}
+
 export async function executeBrowserAction(
   kind: SurfaceActionKind,
   payload: Record<string, unknown>,
@@ -41,14 +60,22 @@ export async function executeBrowserAction(
         await new Promise(resolve => setTimeout(resolve, delayMs));
       }
 
+      // Wait for page to finish loading (or timeout)
+      await waitForBrowserLoad(5000);
+
       const state = browserService.getState();
+      const metadata = await browserService.getPageMetadata();
+      const preview = await browserService.getPageText(2000);
+
       return {
-        summary: `Navigating to ${state.navigation.url || url}`,
+        summary: `Navigated to ${state.navigation.url || url}`,
         data: {
           url: state.navigation.url || url,
           title: state.navigation.title,
           isLoading: state.navigation.isLoading,
           tabCount: state.tabs.length,
+          pagePreview: preview.slice(0, 2000),
+          metadata,
         },
       };
     }
