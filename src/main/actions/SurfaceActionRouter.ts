@@ -11,7 +11,7 @@ import {
   SurfaceActionPayloadMap, SurfaceActionResultMap,
   targetForKind, summarizePayload,
   BrowserNavigatePayload, BrowserCloseTabPayload,
-  BrowserActivateTabPayload,
+  BrowserActivateTabPayload, BrowserClickPayload, BrowserTypePayload,
   TerminalExecutePayload, TerminalWritePayload,
 } from '../../shared/actions/surfaceActionTypes';
 import { appStateStore } from '../state/appStateStore';
@@ -99,6 +99,44 @@ class SurfaceActionRouter {
     return { ...record };
   }
 
+  cancelQueuedAction(id: string): SurfaceActionRecord {
+    const state = appStateStore.getState();
+    const record = state.surfaceActions.find(a => a.id === id);
+
+    if (!record) {
+      throw new Error(`Action ${id} not found`);
+    }
+    if (record.status !== 'queued') {
+      throw new Error(`Action ${id} is ${record.status}, not queued — cannot cancel`);
+    }
+
+    const controller = record.target === 'browser' ? this.browserController : this.terminalController;
+    const removed = controller.cancelById(id, 'Cancelled by user');
+
+    if (!removed) {
+      // TOCTOU note: the state record may still show 'queued' briefly after drain()
+      // promoted the action to the active slot but before executeAction() transitions
+      // it to 'running'. The controller is authoritative — if cancelById returns false,
+      // the action is no longer in the queue regardless of state-store lag.
+      throw new Error(`Action ${id} is already running — cannot cancel`);
+    }
+
+    return this.getCurrentRecord(id);
+  }
+
+  getQueueDiagnostics(): { browser: { active: string | null; queueLength: number }; terminal: { active: string | null; queueLength: number } } {
+    return {
+      browser: {
+        active: this.browserController.getActive()?.id ?? null,
+        queueLength: this.browserController.getQueueLength(),
+      },
+      terminal: {
+        active: this.terminalController.getActive()?.id ?? null,
+        queueLength: this.terminalController.getQueueLength(),
+      },
+    };
+  }
+
   getRecentActions(limit: number = 50): SurfaceActionRecord[] {
     const state = appStateStore.getState();
     return state.surfaceActions.slice(-limit);
@@ -136,16 +174,16 @@ class SurfaceActionRouter {
     }
 
     try {
-      let resultSummary: string;
+      let result: { summary: string; data: Record<string, unknown> };
 
       if (action.target === 'browser') {
-        resultSummary = await executeBrowserAction(action.kind, action.payload);
+        result = await executeBrowserAction(action.kind, action.payload);
       } else {
-        resultSummary = await executeTerminalAction(action.kind, action.payload);
+        result = await executeTerminalAction(action.kind, action.payload);
       }
 
       // Transition to completed
-      this.updateRecord(id, { status: 'completed', resultSummary, updatedAt: Date.now() });
+      this.updateRecord(id, { status: 'completed', resultSummary: result.summary, resultData: result.data, updatedAt: Date.now() });
       eventBus.emit(AppEventType.SURFACE_ACTION_COMPLETED, { record: this.getCurrentRecord(id) });
 
       // Update terminal command state on completion
@@ -167,7 +205,7 @@ class SurfaceActionRouter {
           timestamp: Date.now(),
           level: 'info',
           source: action.target,
-          message: `Action completed: ${resultSummary}`,
+          message: `Action completed: ${result.summary}`,
           taskId: action.taskId ?? undefined,
         },
       });
@@ -257,6 +295,23 @@ class SurfaceActionRouter {
         }
         break;
       }
+      case 'browser.click': {
+        const p = payload as BrowserClickPayload;
+        if (!p.selector || typeof p.selector !== 'string' || p.selector.trim().length === 0) {
+          throw new Error('browser.click requires a non-empty "selector" string');
+        }
+        break;
+      }
+      case 'browser.type': {
+        const p = payload as BrowserTypePayload;
+        if (!p.selector || typeof p.selector !== 'string' || p.selector.trim().length === 0) {
+          throw new Error('browser.type requires a non-empty "selector" string');
+        }
+        if (typeof p.text !== 'string') {
+          throw new Error('browser.type requires a "text" string');
+        }
+        break;
+      }
       // Empty/optional payloads: browser.back, browser.forward, browser.reload, browser.stop, browser.create-tab, terminal.restart, terminal.interrupt
       default:
         break;
@@ -271,7 +326,7 @@ class SurfaceActionRouter {
     });
   }
 
-  private updateRecord(id: string, updates: Partial<Pick<SurfaceActionRecord, 'status' | 'resultSummary' | 'error' | 'updatedAt'>>): void {
+  private updateRecord(id: string, updates: Partial<Pick<SurfaceActionRecord, 'status' | 'resultSummary' | 'resultData' | 'error' | 'updatedAt'>>): void {
     appStateStore.dispatch({
       type: ActionType.UPDATE_SURFACE_ACTION,
       id,
@@ -295,6 +350,7 @@ class SurfaceActionRouter {
       origin: action.origin,
       payloadSummary: summarizePayload(action.kind, action.payload as Record<string, unknown>),
       resultSummary: null,
+      resultData: null,
       error: null,
       createdAt: action.createdAt,
       updatedAt: action.updatedAt,

@@ -22,7 +22,9 @@ export type BrowserActionKind =
   | 'browser.stop'
   | 'browser.create-tab'
   | 'browser.close-tab'
-  | 'browser.activate-tab';
+  | 'browser.activate-tab'
+  | 'browser.click'
+  | 'browser.type';
 
 export type TerminalActionKind =
   | 'terminal.execute'
@@ -34,7 +36,7 @@ export type SurfaceActionKind = BrowserActionKind | TerminalActionKind;
 
 // ─── Action Origin ────────────────────────────────────────────────────────
 
-export type SurfaceActionOrigin = 'command-center' | 'system';
+export type SurfaceActionOrigin = 'command-center' | 'system' | 'model';
 
 // ─── Typed Payloads ───────────────────────────────────────────────────────
 
@@ -43,6 +45,8 @@ export type BrowserCreateTabPayload = { url?: string };
 export type BrowserCloseTabPayload = { tabId: string };
 export type BrowserActivateTabPayload = { tabId: string };
 export type BrowserEmptyPayload = Record<string, never>;
+export type BrowserClickPayload = { selector: string; tabId?: string };
+export type BrowserTypePayload = { selector: string; text: string; tabId?: string };
 
 export type TerminalExecutePayload = { command: string };
 export type TerminalWritePayload = { input: string };
@@ -57,6 +61,8 @@ export type SurfaceActionPayloadMap = {
   'browser.create-tab': BrowserCreateTabPayload;
   'browser.close-tab': BrowserCloseTabPayload;
   'browser.activate-tab': BrowserActivateTabPayload;
+  'browser.click': BrowserClickPayload;
+  'browser.type': BrowserTypePayload;
   'terminal.execute': TerminalExecutePayload;
   'terminal.write': TerminalWritePayload;
   'terminal.restart': TerminalEmptyPayload;
@@ -88,6 +94,9 @@ export type BrowserActivateTabResult = {
   tabId: string;
   activated: boolean;
 };
+
+export type BrowserClickResult = { clicked: boolean; error?: string };
+export type BrowserTypeResult = { typed: boolean; error?: string };
 
 export type TerminalExecuteResult = {
   sessionId: string;
@@ -122,6 +131,8 @@ export type SurfaceActionResultMap = {
   'browser.create-tab': BrowserCreateTabResult;
   'browser.close-tab': BrowserCloseTabResult;
   'browser.activate-tab': BrowserActivateTabResult;
+  'browser.click': BrowserClickResult;
+  'browser.type': BrowserTypeResult;
   'terminal.execute': TerminalExecuteResult;
   'terminal.write': TerminalWriteResult;
   'terminal.restart': TerminalRestartResult;
@@ -152,6 +163,7 @@ export type SurfaceActionRecord = {
   origin: SurfaceActionOrigin;
   payloadSummary: string;
   resultSummary: string | null;
+  resultData: Record<string, unknown> | null;
   error: string | null;
   createdAt: number;
   updatedAt: number;
@@ -187,6 +199,8 @@ export function summarizePayload(kind: SurfaceActionKind, payload: Record<string
     }
     case 'browser.close-tab': return `Close tab ${(payload as BrowserCloseTabPayload).tabId}`;
     case 'browser.activate-tab': return `Switch to tab ${(payload as BrowserActivateTabPayload).tabId}`;
+    case 'browser.click': return `Click: ${(payload as BrowserClickPayload).selector}`;
+    case 'browser.type': return `Type in: ${(payload as BrowserTypePayload).selector}`;
     case 'terminal.execute': return `Execute: ${(payload as TerminalExecutePayload).command}`;
     case 'terminal.write': return `Write: ${(payload as TerminalWritePayload).input}`;
     case 'terminal.restart': return 'Restart terminal';
@@ -198,6 +212,7 @@ export function summarizePayload(kind: SurfaceActionKind, payload: Record<string
 export const BROWSER_ACTION_KINDS: BrowserActionKind[] = [
   'browser.navigate', 'browser.back', 'browser.forward', 'browser.reload', 'browser.stop',
   'browser.create-tab', 'browser.close-tab', 'browser.activate-tab',
+  'browser.click', 'browser.type',
 ];
 
 export const TERMINAL_ACTION_KINDS: TerminalActionKind[] = [

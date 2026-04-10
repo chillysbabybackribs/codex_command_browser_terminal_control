@@ -23,6 +23,8 @@ export const ACTION_CONCURRENCY_POLICY: Record<SurfaceActionKind, ActionConcurre
   'browser.create-tab':   { mode: 'serialize' },
   'browser.close-tab':    { mode: 'serialize' },
   'browser.activate-tab': { mode: 'serialize' },
+  'browser.click':        { mode: 'serialize' },
+  'browser.type':         { mode: 'serialize' },
 
   // Terminal — execute serializes, replace queued same-kind
   'terminal.execute':     { mode: 'serialize', replacesSameKind: true },
