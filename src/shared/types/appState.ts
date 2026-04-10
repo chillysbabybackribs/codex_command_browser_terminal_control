@@ -1,5 +1,5 @@
 import { PhysicalWindowRole, SurfaceRole, LogSourceRole } from './windowRoles';
-import { TerminalSessionState, createDefaultTerminalState } from './terminal';
+import { TerminalSessionState, createDefaultTerminalState, TerminalCommandState, createDefaultTerminalCommandState } from './terminal';
 import { BrowserState, createDefaultBrowserState } from './browser';
 import { SurfaceActionRecord } from '../actions/surfaceActionTypes';
 
@@ -60,6 +60,7 @@ export type AppState = {
   browser: SurfaceExecutionState;
   terminal: SurfaceExecutionState;
   terminalSession: TerminalSessionState;
+  terminalCommand: TerminalCommandState;
   browserRuntime: BrowserState;
   surfaceActions: SurfaceActionRecord[];
 };
@@ -87,6 +88,7 @@ export function createDefaultAppState(): AppState {
     browser: { status: 'idle', lastUpdatedAt: null, detail: '' },
     terminal: { status: 'idle', lastUpdatedAt: null, detail: '' },
     terminalSession: createDefaultTerminalState(),
+    terminalCommand: createDefaultTerminalCommandState(),
     browserRuntime: createDefaultBrowserState(),
     surfaceActions: [],
   };

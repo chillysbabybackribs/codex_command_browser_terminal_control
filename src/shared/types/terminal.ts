@@ -25,3 +25,19 @@ export function createDefaultTerminalState(): TerminalSessionState {
 export type TerminalSessionState = {
   session: TerminalSessionInfo | null;
 };
+
+export type TerminalCommandState = {
+  isRunning: boolean;
+  lastCommand: string | null;
+  lastExitCode: number | null;
+  lastUpdatedAt: number;
+};
+
+export function createDefaultTerminalCommandState(): TerminalCommandState {
+  return {
+    isRunning: false,
+    lastCommand: null,
+    lastExitCode: null,
+    lastUpdatedAt: 0,
+  };
+}
