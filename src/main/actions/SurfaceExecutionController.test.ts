@@ -109,3 +109,69 @@ describe('SurfaceExecutionController — serialize', () => {
     expect(executeFn).toHaveBeenCalledTimes(1);
   });
 });
+
+const BYPASS: ActionConcurrencyPolicy = { mode: 'bypass' };
+
+describe('SurfaceExecutionController — bypass', () => {
+  let executeFn: ReturnType<typeof vi.fn>;
+  let onFail: ReturnType<typeof vi.fn>;
+  let controller: SurfaceExecutionController;
+
+  beforeEach(() => {
+    executeFn = vi.fn();
+    onFail = vi.fn();
+    controller = new SurfaceExecutionController('browser', executeFn, onFail);
+  });
+
+  it('bypass action executes immediately even with a serialized action running', async () => {
+    let resolveFirst!: () => void;
+    executeFn.mockImplementationOnce(() => new Promise<void>(r => { resolveFirst = r; }));
+    executeFn.mockResolvedValueOnce(undefined);
+
+    const serialized = makeAction({ id: 'sa_serial', kind: 'browser.navigate' });
+    const bypass = makeAction({ id: 'sa_bypass', kind: 'browser.stop' });
+
+    controller.submit(serialized, SERIALIZE);
+    controller.submit(bypass, BYPASS);
+
+    // Both should have been called
+    expect(executeFn).toHaveBeenCalledTimes(2);
+    expect(executeFn).toHaveBeenCalledWith(bypass);
+
+    resolveFirst();
+  });
+
+  it('bypass action does not occupy the active slot', async () => {
+    let resolveBypass!: () => void;
+    executeFn.mockImplementationOnce(() => new Promise<void>(r => { resolveBypass = r; }));
+
+    const bypass = makeAction({ id: 'sa_bypass', kind: 'browser.stop' });
+    controller.submit(bypass, BYPASS);
+
+    // Active slot should remain null (bypass doesn't occupy it)
+    expect(controller.getActive()).toBeNull();
+
+    resolveBypass();
+  });
+
+  it('bypass action does not affect queue drain', async () => {
+    executeFn.mockResolvedValue(undefined);
+
+    const a1 = makeAction({ id: 'sa_1', kind: 'browser.navigate' });
+    const bypass = makeAction({ id: 'sa_bypass', kind: 'browser.stop' });
+    const a2 = makeAction({ id: 'sa_2', kind: 'browser.navigate' });
+
+    controller.submit(a1, SERIALIZE);
+    await vi.waitFor(() => expect(executeFn).toHaveBeenCalledWith(a1));
+
+    controller.submit(a2, SERIALIZE);
+    controller.submit(bypass, BYPASS);
+
+    await vi.waitFor(() => expect(executeFn).toHaveBeenCalledTimes(3));
+
+    // bypass was called but queue still drains a2 after a1
+    const callArgs = executeFn.mock.calls.map((c: [SurfaceAction]) => c[0].id);
+    expect(callArgs).toContain('sa_bypass');
+    expect(callArgs).toContain('sa_2');
+  });
+});

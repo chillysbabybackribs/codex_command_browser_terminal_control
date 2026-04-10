@@ -15,10 +15,11 @@ export class SurfaceExecutionController {
   ) {}
 
   submit(action: SurfaceAction, policy: ActionConcurrencyPolicy): void {
-    if (policy.mode === 'serialize') {
+    if (policy.mode === 'bypass') {
+      this.executeImmediate(action);
+    } else {
       this.enqueue(action, policy);
     }
-    // bypass mode added in Task 3
   }
 
   getActive(): SurfaceAction | null {
@@ -27,6 +28,12 @@ export class SurfaceExecutionController {
 
   getQueueLength(): number {
     return this.queue.length;
+  }
+
+  private executeImmediate(action: SurfaceAction): void {
+    // Fire-and-forget — bypass does not occupy the active slot or touch the queue.
+    // Errors are handled inside the execute callback (router).
+    this.execute(action).catch(() => {});
   }
 
   private enqueue(action: SurfaceAction, _policy: ActionConcurrencyPolicy): void {
