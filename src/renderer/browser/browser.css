@@ -1,0 +1,25 @@
+.surface-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.surface-detail {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.log-stream {
+  max-height: 200px;
+  border-top: 1px solid var(--border);
+  flex: none;
+}
+
+.surface-placeholder {
+  background: rgba(63, 185, 80, 0.03);
+}

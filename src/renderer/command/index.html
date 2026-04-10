@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'">
+  <title>Command Center</title>
+  <link rel="stylesheet" href="../shared/styles.css">
+  <link rel="stylesheet" href="command.css">
+</head>
+<body>
+  <div class="window-container">
+    <header class="window-header">
+      <div class="role-badge role-command">
+        <span class="dot"></span>
+        COMMAND CENTER
+      </div>
+      <div class="task-summary" id="taskSummary">No active task</div>
+      <div class="header-right">
+        <div class="surface-indicators">
+          <div class="surface-indicator">
+            <span class="label">Browser</span>
+            <span class="status-dot idle" id="browserStatusDot"></span>
+          </div>
+          <div class="surface-indicator">
+            <span class="label">Terminal</span>
+            <span class="status-dot idle" id="terminalStatusDot"></span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="layout-bar">
+      <span class="layout-label">Layout:</span>
+      <div class="layout-controls" id="layoutControls">
+        <button class="btn active" data-preset="default">Default</button>
+        <button class="btn" data-preset="focus-browser">Browser</button>
+        <button class="btn" data-preset="focus-terminal">Terminal</button>
+        <button class="btn" data-preset="focus-command">Command</button>
+        <button class="btn" id="resetLayoutBtn">Reset</button>
+      </div>
+    </div>
+
+    <div class="window-body">
+      <div class="task-list" id="taskList">
+        <div class="empty-state">No tasks yet</div>
+      </div>
+      <div class="log-stream" id="logStream"></div>
+    </div>
+
+    <div class="input-area">
+      <input type="text" id="taskInput" placeholder="Enter a task..." autocomplete="off">
+      <button class="btn primary" id="submitBtn">Submit</button>
+    </div>
+
+    <div class="status-bar">
+      <div class="status-indicator">
+        <span class="status-dot done" id="syncDot"></span>
+        <span id="syncLabel">Synced</span>
+      </div>
+      <span id="layoutLabel">Layout: default</span>
+      <span id="taskCount">Tasks: 0</span>
+    </div>
+  </div>
+  <script type="module" src="command.js"></script>
+</body>
+</html>
