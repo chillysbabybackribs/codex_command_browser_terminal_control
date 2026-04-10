@@ -13,6 +13,7 @@ export type BrowserNavigationState = {
   isLoading: boolean;
   loadingProgress: number | null;
   favicon: string;
+  lastNavigationAt: number | null;
 };
 
 export type BrowserProfile = {
@@ -175,6 +176,7 @@ export function createDefaultBrowserState(): BrowserState {
       isLoading: false,
       loadingProgress: null,
       favicon: '',
+      lastNavigationAt: null,
     },
     profile: {
       id: 'workspace-browser',

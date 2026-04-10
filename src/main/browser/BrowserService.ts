@@ -5,7 +5,7 @@
 // Manages multiple tabs (each a WebContentsView), bookmarks, extensions,
 // settings, zoom, find-in-page, downloads, and permissions.
 
-import { BrowserWindow, WebContentsView, session, DownloadItem, Event as ElectronEvent } from 'electron';
+import { BrowserWindow, WebContentsView, session, DownloadItem, Event as ElectronEvent, Menu, MenuItem, clipboard } from 'electron';
 import {
   BrowserState, BrowserNavigationState, BrowserSurfaceStatus,
   BrowserHistoryEntry, BrowserDownloadState, BrowserPermissionRequest,
@@ -188,7 +188,7 @@ export class BrowserService {
       id,
       navigation: {
         url: '', title: 'New Tab', canGoBack: false, canGoForward: false,
-        isLoading: false, loadingProgress: null, favicon: '',
+        isLoading: false, loadingProgress: null, favicon: '', lastNavigationAt: null,
       },
       status: 'idle',
       zoomLevel: this.settings.defaultZoom,
@@ -308,6 +308,7 @@ export class BrowserService {
       nav.url = url;
       nav.canGoBack = wc.navigationHistory.canGoBack();
       nav.canGoForward = wc.navigationHistory.canGoForward();
+      nav.lastNavigationAt = Date.now();
       this.addHistoryEntry(url, nav.title, nav.favicon);
       this.syncTabAndMaybeNavigation(entry);
     });
@@ -349,6 +350,64 @@ export class BrowserService {
     wc.on('audio-state-changed', () => {
       info.isAudible = wc.isCurrentlyAudible();
       this.syncTabAndMaybeNavigation(entry);
+    });
+
+    wc.on('context-menu', (_e: ElectronEvent, params: Electron.ContextMenuParams) => {
+      const menu = new Menu();
+
+      // ── Text editing actions ──
+      if (params.isEditable) {
+        menu.append(new MenuItem({ label: 'Undo', role: 'undo', enabled: params.editFlags.canUndo }));
+        menu.append(new MenuItem({ label: 'Redo', role: 'redo', enabled: params.editFlags.canRedo }));
+        menu.append(new MenuItem({ type: 'separator' }));
+        menu.append(new MenuItem({ label: 'Cut', role: 'cut', enabled: params.editFlags.canCut }));
+        menu.append(new MenuItem({ label: 'Copy', role: 'copy', enabled: params.editFlags.canCopy }));
+        menu.append(new MenuItem({ label: 'Paste', role: 'paste', enabled: params.editFlags.canPaste }));
+        menu.append(new MenuItem({ label: 'Delete', role: 'delete', enabled: params.editFlags.canDelete }));
+        menu.append(new MenuItem({ type: 'separator' }));
+        menu.append(new MenuItem({ label: 'Select All', role: 'selectAll', enabled: params.editFlags.canSelectAll }));
+      } else {
+        // ── Selection actions (non-editable) ──
+        if (params.selectionText) {
+          menu.append(new MenuItem({ label: 'Copy', role: 'copy' }));
+          menu.append(new MenuItem({ type: 'separator' }));
+        }
+        menu.append(new MenuItem({ label: 'Select All', role: 'selectAll' }));
+      }
+
+      // ── Link actions ──
+      if (params.linkURL) {
+        menu.append(new MenuItem({ type: 'separator' }));
+        menu.append(new MenuItem({
+          label: 'Open Link in New Tab',
+          click: () => this.createTab(params.linkURL),
+        }));
+        menu.append(new MenuItem({
+          label: 'Copy Link Address',
+          click: () => clipboard.writeText(params.linkURL),
+        }));
+      }
+
+      // ── Image actions ──
+      if (params.hasImageContents && params.srcURL) {
+        menu.append(new MenuItem({ type: 'separator' }));
+        menu.append(new MenuItem({
+          label: 'Open Image in New Tab',
+          click: () => this.createTab(params.srcURL),
+        }));
+        menu.append(new MenuItem({
+          label: 'Copy Image Address',
+          click: () => clipboard.writeText(params.srcURL),
+        }));
+      }
+
+      // ── Page actions ──
+      menu.append(new MenuItem({ type: 'separator' }));
+      menu.append(new MenuItem({ label: 'Back', enabled: wc.navigationHistory.canGoBack(), click: () => wc.navigationHistory.goBack() }));
+      menu.append(new MenuItem({ label: 'Forward', enabled: wc.navigationHistory.canGoForward(), click: () => wc.navigationHistory.goForward() }));
+      menu.append(new MenuItem({ label: 'Reload', click: () => wc.reload() }));
+
+      menu.popup();
     });
 
     wc.setWindowOpenHandler(({ url }) => {
@@ -685,7 +744,7 @@ export class BrowserService {
     const active = this.getActiveEntry();
     const nav = active ? { ...active.info.navigation } : {
       url: '', title: '', canGoBack: false, canGoForward: false,
-      isLoading: false, loadingProgress: null, favicon: '',
+      isLoading: false, loadingProgress: null, favicon: '', lastNavigationAt: null,
     };
     const status = active ? active.info.status : 'idle' as BrowserSurfaceStatus;
     return {
