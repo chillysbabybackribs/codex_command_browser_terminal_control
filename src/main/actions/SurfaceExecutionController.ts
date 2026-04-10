@@ -16,6 +16,9 @@ export class SurfaceExecutionController {
 
   submit(action: SurfaceAction, policy: ActionConcurrencyPolicy): void {
     if (policy.mode === 'bypass') {
+      if (policy.requiresActiveAction && this.active === null) {
+        throw new Error(`No active ${this.surface} action to receive input`);
+      }
       if (policy.clearsQueue) {
         this.cancelQueued(`Cancelled by ${action.kind}`);
       }
@@ -36,7 +39,7 @@ export class SurfaceExecutionController {
   private executeImmediate(action: SurfaceAction): void {
     // Fire-and-forget — bypass does not occupy the active slot or touch the queue.
     // Errors are handled inside the execute callback (router).
-    this.execute(action).catch(() => {});
+    Promise.resolve(this.execute(action)).catch(() => {});
   }
 
   private cancelQueued(reason: string): void {
@@ -73,7 +76,7 @@ export class SurfaceExecutionController {
     if (!next) return;
 
     this.active = next;
-    this.execute(next)
+    Promise.resolve(this.execute(next))
       .catch(() => {
         // Error handling is done inside the execute callback (router).
         // drain() just needs to advance regardless.

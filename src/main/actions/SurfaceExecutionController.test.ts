@@ -322,3 +322,78 @@ describe('SurfaceExecutionController — clearsQueue', () => {
     expect(executeFn).toHaveBeenCalledWith(stop);
   });
 });
+
+const BYPASS_REQUIRES_ACTIVE: ActionConcurrencyPolicy = { mode: 'bypass', requiresActiveAction: true };
+
+describe('SurfaceExecutionController — requiresActiveAction', () => {
+  let executeFn: ReturnType<typeof vi.fn>;
+  let onFail: ReturnType<typeof vi.fn>;
+  let controller: SurfaceExecutionController;
+
+  beforeEach(() => {
+    executeFn = vi.fn();
+    onFail = vi.fn();
+    controller = new SurfaceExecutionController('terminal', executeFn, onFail);
+  });
+
+  it('throws when no action is active', () => {
+    const write = makeAction({
+      id: 'sa_write',
+      target: 'terminal',
+      kind: 'terminal.write',
+      payload: { input: 'y\n' },
+    });
+
+    expect(() => controller.submit(write, BYPASS_REQUIRES_ACTIVE))
+      .toThrow('No active terminal action to receive input');
+  });
+
+  it('executes when an action is active', async () => {
+    let resolveExec!: () => void;
+    executeFn.mockImplementationOnce(() => new Promise<void>(r => { resolveExec = r; }));
+    executeFn.mockResolvedValueOnce(undefined);
+
+    const exec = makeAction({
+      id: 'sa_exec',
+      target: 'terminal',
+      kind: 'terminal.execute',
+      payload: { command: 'npm test' },
+    });
+    const write = makeAction({
+      id: 'sa_write',
+      target: 'terminal',
+      kind: 'terminal.write',
+      payload: { input: 'y\n' },
+    });
+
+    controller.submit(exec, SERIALIZE);  // runs, occupies active slot
+    controller.submit(write, BYPASS_REQUIRES_ACTIVE); // should succeed
+
+    expect(executeFn).toHaveBeenCalledTimes(2);
+    expect(executeFn).toHaveBeenCalledWith(write);
+
+    resolveExec();
+  });
+
+  it('throws when only queued actions exist (no running)', async () => {
+    let resolveFirst!: () => void;
+    executeFn.mockImplementationOnce(() => new Promise<void>(r => { resolveFirst = r; }));
+
+    const a1 = makeAction({ id: 'sa_1', target: 'terminal', kind: 'terminal.execute' });
+    const a2 = makeAction({ id: 'sa_2', target: 'terminal', kind: 'terminal.execute' });
+    const write = makeAction({
+      id: 'sa_write',
+      target: 'terminal',
+      kind: 'terminal.write',
+      payload: { input: 'y\n' },
+    });
+
+    controller.submit(a1, SERIALIZE); // runs
+    controller.submit(a2, SERIALIZE); // queued
+
+    // a1 is running, so write should work
+    expect(() => controller.submit(write, BYPASS_REQUIRES_ACTIVE)).not.toThrow();
+
+    resolveFirst();
+  });
+});
