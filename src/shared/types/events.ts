@@ -8,6 +8,7 @@ import {
   BrowserSettings,
 } from './browser';
 import { SurfaceActionRecord } from '../actions/surfaceActionTypes';
+import { ProviderId, ProviderRuntime, InvocationProgress, InvocationResult, HandoffPacket } from './model';
 
 export enum AppEventType {
   TASK_CREATED = 'TASK_CREATED',
@@ -61,6 +62,15 @@ export enum AppEventType {
   BROWSER_EXTENSION_LOADED = 'BROWSER_EXTENSION_LOADED',
   BROWSER_EXTENSION_REMOVED = 'BROWSER_EXTENSION_REMOVED',
 
+  // Model lifecycle events
+  MODEL_PROVIDER_DETECTED = 'MODEL_PROVIDER_DETECTED',
+  MODEL_PROVIDER_STATUS_CHANGED = 'MODEL_PROVIDER_STATUS_CHANGED',
+  MODEL_INVOCATION_STARTED = 'MODEL_INVOCATION_STARTED',
+  MODEL_INVOCATION_PROGRESS = 'MODEL_INVOCATION_PROGRESS',
+  MODEL_INVOCATION_COMPLETED = 'MODEL_INVOCATION_COMPLETED',
+  MODEL_INVOCATION_FAILED = 'MODEL_INVOCATION_FAILED',
+  MODEL_HANDOFF = 'MODEL_HANDOFF',
+
   // Terminal session lifecycle events
   TERMINAL_SESSION_CREATED = 'TERMINAL_SESSION_CREATED',
   TERMINAL_SESSION_STARTED = 'TERMINAL_SESSION_STARTED',
@@ -71,6 +81,7 @@ export enum AppEventType {
   TERMINAL_SESSION_RESTARTED = 'TERMINAL_SESSION_RESTARTED',
   TERMINAL_STATUS_UPDATED = 'TERMINAL_STATUS_UPDATED',
   TERMINAL_SESSION_REATTACHED = 'TERMINAL_SESSION_REATTACHED',
+  TERMINAL_COMMAND_FINISHED = 'TERMINAL_COMMAND_FINISHED',
 }
 
 export type AppEventPayloads = {
@@ -93,6 +104,15 @@ export type AppEventPayloads = {
   [AppEventType.SURFACE_ACTION_RESULT_UPDATED]: { record: SurfaceActionRecord };
 
   [AppEventType.APP_STATE_SYNCED]: { state: AppState };
+
+  // Model lifecycle payloads
+  [AppEventType.MODEL_PROVIDER_DETECTED]: { providerId: ProviderId; available: boolean; detail: string };
+  [AppEventType.MODEL_PROVIDER_STATUS_CHANGED]: { runtime: ProviderRuntime };
+  [AppEventType.MODEL_INVOCATION_STARTED]: { taskId: string; providerId: ProviderId };
+  [AppEventType.MODEL_INVOCATION_PROGRESS]: { progress: InvocationProgress };
+  [AppEventType.MODEL_INVOCATION_COMPLETED]: { result: InvocationResult };
+  [AppEventType.MODEL_INVOCATION_FAILED]: { taskId: string; providerId: ProviderId; error: string };
+  [AppEventType.MODEL_HANDOFF]: { packet: HandoffPacket };
 
   // Browser runtime lifecycle payloads
   [AppEventType.BROWSER_SURFACE_CREATED]: { profileId: string; partition: string };
@@ -134,6 +154,14 @@ export type AppEventPayloads = {
   [AppEventType.TERMINAL_SESSION_RESTARTED]: { oldSessionId: string; session: TerminalSessionInfo };
   [AppEventType.TERMINAL_STATUS_UPDATED]: { sessionId: string; status: TerminalSessionStatus };
   [AppEventType.TERMINAL_SESSION_REATTACHED]: { session: TerminalSessionInfo; scrollbackLength: number };
+  [AppEventType.TERMINAL_COMMAND_FINISHED]: {
+    sessionId: string;
+    exitCode: number;
+    output: string;
+    cwd: string;
+    durationMs: number;
+    command: string;
+  };
 };
 
 export type AppEvent<T extends AppEventType = AppEventType> = {
