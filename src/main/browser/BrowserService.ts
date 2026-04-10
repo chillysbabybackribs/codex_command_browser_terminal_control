@@ -24,6 +24,7 @@ import {
 } from './browserSessionStore';
 import { resolvePermission, classifyPermission } from './browserPermissions';
 import { createDownloadEntry, resolveDownloadPath } from './browserDownloads';
+import { importChromeCookies, isChromeAvailable, promptCookieImport } from './chromeCookieImporter';
 
 const PROFILE_ID = 'workspace-browser';
 const PARTITION = 'persist:workspace-browser';
@@ -84,6 +85,9 @@ export class BrowserService {
     eventBus.emit(AppEventType.BROWSER_SURFACE_CREATED, { profileId: PROFILE_ID, partition: PARTITION });
     this.emitLog('info', 'Browser runtime initialized with persistent session');
 
+    // Import Chrome cookies (async, non-blocking — sessions are persistent so this supplements)
+    this.handleChromeSessionImport(ses, hostWindow);
+
     // Restore tabs from last session or create a single default tab
     const lastUrls = loadLastUrls();
     const activeIdx = loadActiveTabIndex();
@@ -103,7 +107,47 @@ export class BrowserService {
     this.syncState();
   }
 
+  async reimportChromeCookies(): Promise<{ imported: number; failed: number; domains: string[] }> {
+    if (!this.sessionInstance) throw new Error('Browser not initialized');
+    if (!isChromeAvailable()) throw new Error('Chrome not available');
+    const result = await importChromeCookies(this.sessionInstance);
+    this.emitLog('info', `Chrome sessions re-imported: ${result.imported} cookies from ${result.domains.length} domains`);
+    return result;
+  }
+
+  private async handleChromeSessionImport(ses: Electron.Session, hostWindow: BrowserWindow): Promise<void> {
+    if (!isChromeAvailable()) return;
+
+    if (this.settings.importChromeCookies === null) {
+      const optIn = await promptCookieImport(hostWindow);
+      this.settings.importChromeCookies = optIn;
+      saveSettings(this.settings);
+      if (!optIn) return;
+    }
+
+    if (!this.settings.importChromeCookies) return;
+
+    try {
+      const result = await importChromeCookies(ses);
+      this.emitLog('info', `Chrome sessions imported: ${result.imported} cookies from ${result.domains.length} domains`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.emitLog('warn', `Chrome cookie import failed: ${msg}`);
+    }
+  }
+
   private initSession(ses: Electron.Session): void {
+    // Strip "Electron/X.X.X" from UA only for Google OAuth requests
+    // This is the minimum change to make "Sign in with Google" work
+    // All other requests keep the default UA untouched
+    ses.webRequest.onBeforeSendHeaders({ urls: ['*://accounts.google.com/*'] }, (details, callback) => {
+      const ua = details.requestHeaders['User-Agent'];
+      if (ua && ua.includes('Electron')) {
+        details.requestHeaders['User-Agent'] = ua.replace(/\s*Electron\/[\d.]+/g, '');
+      }
+      callback({ requestHeaders: details.requestHeaders });
+    });
+
     ses.setPermissionRequestHandler((webContents, permission, callback) => {
       const permType = classifyPermission(permission);
       const decision = resolvePermission(permType);
@@ -237,7 +281,7 @@ export class BrowserService {
     if (this.hostWindow && !this.hostWindow.isDestroyed()) {
       try { this.hostWindow.contentView.removeChildView(entry.view); } catch {}
     }
-    entry.view.webContents.close();
+    try { if (!entry.view.webContents.isDestroyed()) entry.view.webContents.close(); } catch {}
     this.tabs.delete(tabId);
 
     eventBus.emit(AppEventType.BROWSER_TAB_CLOSED, { tabId });
@@ -621,10 +665,11 @@ export class BrowserService {
 
   async clearData(): Promise<void> {
     const entry = this.getActiveEntry();
-    if (!entry) return;
-    const ses = entry.view.webContents.session;
-    await ses.clearStorageData();
-    await ses.clearCache();
+    if (entry?.view?.webContents && !entry.view.webContents.isDestroyed()) {
+      const ses = entry.view.webContents.session;
+      await ses.clearStorageData();
+      await ses.clearCache();
+    }
     this.clearHistory();
     this.emitLog('info', 'Browser data cleared (cache, storage, history)');
   }
@@ -794,6 +839,114 @@ export class BrowserService {
   }
 
   isCreated(): boolean { return this.tabs.size > 0; }
+
+  async getPageText(maxLength: number = 8000): Promise<string> {
+    const entry = this.getActiveEntry();
+    if (!entry) return '';
+    try {
+      const text: string = await entry.view.webContents.executeJavaScript(
+        'document.body ? document.body.innerText : ""',
+      );
+      return text.slice(0, maxLength);
+    } catch {
+      return '(unable to extract page text)';
+    }
+  }
+
+  async executeInPage(
+    expression: string,
+    tabId?: string,
+  ): Promise<{ result: unknown; error: string | null }> {
+    const entry = tabId ? this.tabs.get(tabId) : this.getActiveEntry();
+    if (!entry) return { result: null, error: 'No active tab' };
+    try {
+      const result = await entry.view.webContents.executeJavaScript(expression);
+      return { result, error: null };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { result: null, error: message };
+    }
+  }
+
+  async querySelectorAll(
+    selector: string,
+    tabId?: string,
+    limit: number = 20,
+  ): Promise<Array<{ tag: string; text: string; href: string | null; id: string; classes: string[] }>> {
+    const safeSelector = JSON.stringify(selector);
+    const { result, error } = await this.executeInPage(`
+      (() => {
+        const els = Array.from(document.querySelectorAll(${safeSelector})).slice(0, ${Math.floor(limit)});
+        return els.map(el => ({
+          tag: el.tagName.toLowerCase(),
+          text: (el.innerText || el.textContent || '').slice(0, 200),
+          href: el.getAttribute('href'),
+          id: el.id || '',
+          classes: Array.from(el.classList),
+        }));
+      })()
+    `, tabId);
+    if (error || !Array.isArray(result)) return [];
+    return result;
+  }
+
+  async clickElement(
+    selector: string,
+    tabId?: string,
+  ): Promise<{ clicked: boolean; error: string | null }> {
+    const safeSelector = JSON.stringify(selector);
+    const { result, error } = await this.executeInPage(`
+      (() => {
+        const el = document.querySelector(${safeSelector});
+        if (!el) return { clicked: false, reason: 'Element not found' };
+        el.click();
+        return { clicked: true };
+      })()
+    `, tabId);
+    if (error) return { clicked: false, error };
+    const r = result as { clicked?: boolean; reason?: string } | null;
+    return { clicked: r?.clicked ?? false, error: r?.reason ?? null };
+  }
+
+  async typeInElement(
+    selector: string,
+    text: string,
+    tabId?: string,
+  ): Promise<{ typed: boolean; error: string | null }> {
+    const safeSelector = JSON.stringify(selector);
+    const safeText = JSON.stringify(text);
+    const { result, error } = await this.executeInPage(`
+      (() => {
+        const el = document.querySelector(${safeSelector});
+        if (!el) return { typed: false, reason: 'Element not found' };
+        el.focus();
+        el.value = ${safeText};
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        return { typed: true };
+      })()
+    `, tabId);
+    if (error) return { typed: false, error };
+    const r = result as { typed?: boolean; reason?: string } | null;
+    return { typed: r?.typed ?? false, error: r?.reason ?? null };
+  }
+
+  async getPageMetadata(tabId?: string): Promise<Record<string, unknown>> {
+    const { result, error } = await this.executeInPage(`
+      (() => ({
+        title: document.title,
+        url: location.href,
+        description: document.querySelector('meta[name="description"]')?.content || '',
+        h1: Array.from(document.querySelectorAll('h1')).map(el => el.innerText).slice(0, 5),
+        links: document.querySelectorAll('a[href]').length,
+        inputs: document.querySelectorAll('input, textarea, select').length,
+        forms: document.querySelectorAll('form').length,
+        images: document.querySelectorAll('img').length,
+      }))()
+    `, tabId);
+    if (error) return { error };
+    return (result as Record<string, unknown>) || {};
+  }
 
   // ─── Cleanup ──────────────────────────────────────────────────────────────
 
