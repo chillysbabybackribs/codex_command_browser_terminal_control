@@ -1,6 +1,6 @@
 import { PhysicalWindowRole } from '../../shared/types/windowRoles';
 import { TaskRecord, LogRecord, ExecutionLayoutPreset, SurfaceExecutionState, WindowBounds, AppState, TaskStatus, ExecutionSplitState } from '../../shared/types/appState';
-import { TerminalSessionInfo } from '../../shared/types/terminal';
+import { TerminalSessionInfo, TerminalCommandState } from '../../shared/types/terminal';
 import { BrowserState } from '../../shared/types/browser';
 import { SurfaceActionRecord } from '../../shared/actions/surfaceActionTypes';
 
@@ -15,6 +15,7 @@ export enum ActionType {
   ADD_LOG = 'ADD_LOG',
   SET_SURFACE_STATUS = 'SET_SURFACE_STATUS',
   SET_TERMINAL_SESSION = 'SET_TERMINAL_SESSION',
+  SET_TERMINAL_COMMAND = 'SET_TERMINAL_COMMAND',
   SET_BROWSER_RUNTIME = 'SET_BROWSER_RUNTIME',
   ADD_SURFACE_ACTION = 'ADD_SURFACE_ACTION',
   UPDATE_SURFACE_ACTION = 'UPDATE_SURFACE_ACTION',
@@ -32,6 +33,7 @@ export type Action =
   | { type: ActionType.ADD_LOG; log: LogRecord }
   | { type: ActionType.SET_SURFACE_STATUS; surface: 'browser' | 'terminal'; status: SurfaceExecutionState }
   | { type: ActionType.SET_TERMINAL_SESSION; session: TerminalSessionInfo | null }
+  | { type: ActionType.SET_TERMINAL_COMMAND; command: TerminalCommandState }
   | { type: ActionType.SET_BROWSER_RUNTIME; browserRuntime: BrowserState }
   | { type: ActionType.ADD_SURFACE_ACTION; record: SurfaceActionRecord }
   | { type: ActionType.UPDATE_SURFACE_ACTION; id: string; updates: Partial<Pick<SurfaceActionRecord, 'status' | 'resultSummary' | 'error' | 'updatedAt'>> }

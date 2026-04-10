@@ -68,6 +68,12 @@ export function appReducer(state: AppState, action: Action): AppState {
         terminalSession: { session: action.session },
       };
 
+    case ActionType.SET_TERMINAL_COMMAND:
+      return {
+        ...state,
+        terminalCommand: action.command,
+      };
+
     case ActionType.SET_BROWSER_RUNTIME:
       return {
         ...state,
