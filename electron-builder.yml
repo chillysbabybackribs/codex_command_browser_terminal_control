@@ -1,0 +1,7 @@
+appId: com.v1workspace.app
+productName: V1 Workspace
+directories:
+  output: release
+files:
+  - dist/**/*
+  - "!node_modules/**/*"

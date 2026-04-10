@@ -1,0 +1,21 @@
+{
+  "name": "v1-workspace",
+  "version": "1.0.0",
+  "description": "Multi-window AI workspace",
+  "main": "dist/main/main/main.js",
+  "scripts": {
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:preload": "tsc -p tsconfig.preload.json",
+    "build:renderer": "tsc -p tsconfig.renderer.json",
+    "build": "npm run build:main && npm run build:preload && npm run build:renderer && npm run copy:html",
+    "copy:html": "node scripts/copy-renderer.js",
+    "start": "npm run build && electron .",
+    "dev": "npm run build && electron .",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "typescript": "^5.8.0"
+  },
+  "dependencies": {}
+}
