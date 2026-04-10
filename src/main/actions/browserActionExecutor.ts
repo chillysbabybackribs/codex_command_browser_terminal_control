@@ -6,7 +6,8 @@
 import {
   SurfaceActionKind, BrowserNavigatePayload,
   BrowserCreateTabPayload, BrowserCloseTabPayload, BrowserActivateTabPayload,
-  BrowserClickPayload, BrowserTypePayload,
+  BrowserClickPayload, BrowserTypePayload, BrowserClickRankedActionPayload,
+  BrowserWaitForOverlayPayload, BrowserSemanticTargetPayload, BrowserOpenSearchResultsTabsPayload,
 } from '../../shared/actions/surfaceActionTypes';
 import { browserService } from '../browser/BrowserService';
 
@@ -183,6 +184,56 @@ export async function executeBrowserAction(
       return {
         summary: `Typed in: ${selector}`,
         data: { selector, typed: true, textLength: text.length },
+      };
+    }
+
+    case 'browser.dismiss-foreground-ui': {
+      const { tabId } = payload as BrowserSemanticTargetPayload;
+      const result = await browserService.dismissForegroundUI(tabId);
+      if (!result.success) throw new Error(result.error || 'No dismiss action succeeded');
+      return {
+        summary: result.beforeModalPresent && !result.afterModalPresent
+          ? 'Dismissed foreground UI'
+          : 'Attempted to dismiss foreground UI',
+        data: result,
+      };
+    }
+
+    case 'browser.return-to-primary-surface': {
+      const { tabId } = payload as BrowserSemanticTargetPayload;
+      const result = await browserService.returnToPrimarySurface(tabId);
+      if (!result.success) throw new Error(result.error || 'Primary surface not restored');
+      return {
+        summary: result.restored ? 'Returned to primary surface' : 'Attempted to return to primary surface',
+        data: result,
+      };
+    }
+
+    case 'browser.click-ranked-action': {
+      const ranked = await browserService.clickRankedAction(payload as BrowserClickRankedActionPayload);
+      if (!ranked.success) throw new Error(ranked.error || 'Ranked action failed');
+      return {
+        summary: `Clicked ranked action: ${ranked.clickedAction?.text || ranked.clickedAction?.ref.selector || ranked.clickedAction?.id || 'unknown'}`,
+        data: ranked,
+      };
+    }
+
+    case 'browser.wait-for-overlay-state': {
+      const { tabId, state, timeoutMs } = payload as BrowserWaitForOverlayPayload;
+      const result = await browserService.waitForOverlayState(state, timeoutMs, tabId);
+      if (!result.success) throw new Error(result.error || `Overlay did not become ${state}`);
+      return {
+        summary: `Overlay is now ${state}`,
+        data: result,
+      };
+    }
+
+    case 'browser.open-search-results-tabs': {
+      const result = await browserService.openSearchResultsTabs(payload as BrowserOpenSearchResultsTabsPayload);
+      if (!result.success) throw new Error(result.error || 'No search results were opened');
+      return {
+        summary: `Opened ${result.openedTabIds.length} search result tabs`,
+        data: result,
       };
     }
 

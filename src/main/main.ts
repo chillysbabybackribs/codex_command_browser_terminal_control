@@ -5,6 +5,7 @@ import { createAllWindows, applyDefaultBounds, setAppQuitting, showAllWindows } 
 import { appStateStore } from './state/appStateStore';
 import { terminalService } from './terminal/TerminalService';
 import { browserService } from './browser/BrowserService';
+import { initModelLayer, disposeModelLayer } from './models/index';
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -17,6 +18,7 @@ if (!gotLock) {
 
 app.on('ready', () => {
   terminalService.init();
+  initModelLayer();
   registerIpc();
   initEventRouter();
   createAllWindows();
@@ -25,6 +27,7 @@ app.on('ready', () => {
 
 app.on('before-quit', () => {
   setAppQuitting();
+  disposeModelLayer();
   terminalService.setAppQuitting();
   terminalService.persistNow();
   browserService.dispose();

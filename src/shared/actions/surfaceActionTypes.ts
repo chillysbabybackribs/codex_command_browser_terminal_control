@@ -24,7 +24,12 @@ export type BrowserActionKind =
   | 'browser.close-tab'
   | 'browser.activate-tab'
   | 'browser.click'
-  | 'browser.type';
+  | 'browser.type'
+  | 'browser.dismiss-foreground-ui'
+  | 'browser.return-to-primary-surface'
+  | 'browser.click-ranked-action'
+  | 'browser.wait-for-overlay-state'
+  | 'browser.open-search-results-tabs';
 
 export type TerminalActionKind =
   | 'terminal.execute'
@@ -47,6 +52,10 @@ export type BrowserActivateTabPayload = { tabId: string };
 export type BrowserEmptyPayload = Record<string, never>;
 export type BrowserClickPayload = { selector: string; tabId?: string };
 export type BrowserTypePayload = { selector: string; text: string; tabId?: string };
+export type BrowserSemanticTargetPayload = { tabId?: string };
+export type BrowserClickRankedActionPayload = { tabId?: string; index?: number; actionId?: string; preferDismiss?: boolean };
+export type BrowserWaitForOverlayPayload = { tabId?: string; state: 'open' | 'closed'; timeoutMs?: number };
+export type BrowserOpenSearchResultsTabsPayload = { tabId?: string; indices?: number[]; limit?: number; activateFirst?: boolean };
 
 export type TerminalExecutePayload = { command: string };
 export type TerminalWritePayload = { input: string };
@@ -63,80 +72,15 @@ export type SurfaceActionPayloadMap = {
   'browser.activate-tab': BrowserActivateTabPayload;
   'browser.click': BrowserClickPayload;
   'browser.type': BrowserTypePayload;
+  'browser.dismiss-foreground-ui': BrowserSemanticTargetPayload;
+  'browser.return-to-primary-surface': BrowserSemanticTargetPayload;
+  'browser.click-ranked-action': BrowserClickRankedActionPayload;
+  'browser.wait-for-overlay-state': BrowserWaitForOverlayPayload;
+  'browser.open-search-results-tabs': BrowserOpenSearchResultsTabsPayload;
   'terminal.execute': TerminalExecutePayload;
   'terminal.write': TerminalWritePayload;
   'terminal.restart': TerminalEmptyPayload;
   'terminal.interrupt': TerminalEmptyPayload;
-};
-
-// ─── Typed Results ────────────────────────────────────────────────────────
-
-export type BrowserNavigateResult = {
-  url: string;
-  title: string;
-  success: boolean;
-  error?: string;
-};
-
-export type BrowserEmptyResult = { success: boolean };
-
-export type BrowserCreateTabResult = {
-  tabId: string;
-  url: string;
-};
-
-export type BrowserCloseTabResult = {
-  tabId: string;
-  closed: boolean;
-};
-
-export type BrowserActivateTabResult = {
-  tabId: string;
-  activated: boolean;
-};
-
-export type BrowserClickResult = { clicked: boolean; error?: string };
-export type BrowserTypeResult = { typed: boolean; error?: string };
-
-export type TerminalExecuteResult = {
-  sessionId: string;
-  commandAccepted: boolean;
-  error?: string;
-};
-
-export type TerminalWriteResult = {
-  sessionId: string;
-  written: boolean;
-  error?: string;
-};
-
-export type TerminalRestartResult = {
-  sessionId: string;
-  success: boolean;
-  error?: string;
-};
-
-export type TerminalInterruptResult = {
-  sessionId: string;
-  sent: boolean;
-  error?: string;
-};
-
-export type SurfaceActionResultMap = {
-  'browser.navigate': BrowserNavigateResult;
-  'browser.back': BrowserEmptyResult;
-  'browser.forward': BrowserEmptyResult;
-  'browser.reload': BrowserEmptyResult;
-  'browser.stop': BrowserEmptyResult;
-  'browser.create-tab': BrowserCreateTabResult;
-  'browser.close-tab': BrowserCloseTabResult;
-  'browser.activate-tab': BrowserActivateTabResult;
-  'browser.click': BrowserClickResult;
-  'browser.type': BrowserTypeResult;
-  'terminal.execute': TerminalExecuteResult;
-  'terminal.write': TerminalWriteResult;
-  'terminal.restart': TerminalRestartResult;
-  'terminal.interrupt': TerminalInterruptResult;
 };
 
 // ─── Core Action Model ───────────────────────────────────────────────────
@@ -201,6 +145,24 @@ export function summarizePayload(kind: SurfaceActionKind, payload: Record<string
     case 'browser.activate-tab': return `Switch to tab ${(payload as BrowserActivateTabPayload).tabId}`;
     case 'browser.click': return `Click: ${(payload as BrowserClickPayload).selector}`;
     case 'browser.type': return `Type in: ${(payload as BrowserTypePayload).selector}`;
+    case 'browser.dismiss-foreground-ui': return 'Dismiss foreground UI';
+    case 'browser.return-to-primary-surface': return 'Return to primary surface';
+    case 'browser.click-ranked-action': {
+      const p = payload as BrowserClickRankedActionPayload;
+      if (p.actionId) return `Click ranked action ${p.actionId}`;
+      if (typeof p.index === 'number') return `Click ranked action #${p.index}`;
+      return 'Click top ranked action';
+    }
+    case 'browser.wait-for-overlay-state': {
+      const p = payload as BrowserWaitForOverlayPayload;
+      return `Wait for overlay ${p.state}`;
+    }
+    case 'browser.open-search-results-tabs': {
+      const p = payload as BrowserOpenSearchResultsTabsPayload;
+      if (Array.isArray(p.indices) && p.indices.length > 0) return `Open search results ${p.indices.join(', ')}`;
+      if (typeof p.limit === 'number') return `Open top ${p.limit} search results`;
+      return 'Open search results in tabs';
+    }
     case 'terminal.execute': return `Execute: ${(payload as TerminalExecutePayload).command}`;
     case 'terminal.write': return `Write: ${(payload as TerminalWritePayload).input}`;
     case 'terminal.restart': return 'Restart terminal';
@@ -213,6 +175,9 @@ export const BROWSER_ACTION_KINDS: BrowserActionKind[] = [
   'browser.navigate', 'browser.back', 'browser.forward', 'browser.reload', 'browser.stop',
   'browser.create-tab', 'browser.close-tab', 'browser.activate-tab',
   'browser.click', 'browser.type',
+  'browser.dismiss-foreground-ui', 'browser.return-to-primary-surface',
+  'browser.click-ranked-action', 'browser.wait-for-overlay-state',
+  'browser.open-search-results-tabs',
 ];
 
 export const TERMINAL_ACTION_KINDS: TerminalActionKind[] = [

@@ -8,7 +8,7 @@
 import {
   SurfaceAction, SurfaceActionInput, SurfaceActionRecord,
   SurfaceActionKind, SurfaceActionStatus,
-  SurfaceActionPayloadMap, SurfaceActionResultMap,
+  SurfaceActionPayloadMap,
   targetForKind, summarizePayload,
   BrowserNavigatePayload, BrowserCloseTabPayload,
   BrowserActivateTabPayload, BrowserClickPayload, BrowserTypePayload,

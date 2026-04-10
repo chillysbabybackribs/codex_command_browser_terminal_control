@@ -18,9 +18,14 @@
     <div class="pane browser-pane" id="browserPane">
       <!-- Tab Bar -->
       <div class="tab-bar" id="tabBar">
+        <button class="tab-scroll-btn tab-scroll-left" id="tabScrollLeft" title="Scroll tabs left">&#x2039;</button>
         <div class="tab-list" id="tabList"></div>
+        <button class="tab-scroll-btn tab-scroll-right" id="tabScrollRight" title="Scroll tabs right">&#x203A;</button>
+        <button class="btn-tab-overflow" id="btnTabOverflow" title="All tabs">&#x25BE;</button>
         <button class="btn-tab-new" id="btnNewTab" title="New Tab">+</button>
       </div>
+      <!-- Tab Overflow Panel (in-flow, pushes content down like dropdown-panel) -->
+      <div class="tab-overflow-panel" id="tabOverflowDropdown" style="display:none"></div>
       <!-- Navigation Bar -->
       <div class="pane-header browser-header">
         <div class="browser-nav-controls">

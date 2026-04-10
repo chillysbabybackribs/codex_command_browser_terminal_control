@@ -25,6 +25,11 @@ export const ACTION_CONCURRENCY_POLICY: Record<SurfaceActionKind, ActionConcurre
   'browser.activate-tab': { mode: 'serialize' },
   'browser.click':        { mode: 'serialize' },
   'browser.type':         { mode: 'serialize' },
+  'browser.dismiss-foreground-ui': { mode: 'serialize', replacesSameKind: true },
+  'browser.return-to-primary-surface': { mode: 'serialize', replacesSameKind: true },
+  'browser.click-ranked-action': { mode: 'serialize' },
+  'browser.wait-for-overlay-state': { mode: 'serialize', replacesSameKind: true },
+  'browser.open-search-results-tabs': { mode: 'serialize', replacesSameKind: true },
 
   // Terminal — execute serializes, replace queued same-kind
   'terminal.execute':     { mode: 'serialize', replacesSameKind: true },

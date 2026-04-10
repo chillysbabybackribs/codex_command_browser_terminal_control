@@ -2,8 +2,10 @@ import { AppState, ExecutionLayoutPreset, LogLevel, LogSource, TaskStatus } from
 import { AppEventType } from './events';
 import { PhysicalWindowRole } from './windowRoles';
 import { TerminalSessionInfo } from './terminal';
-import { BrowserState, BrowserHistoryEntry, BrowserNavigationState, TabInfo, BookmarkEntry, ExtensionInfo, BrowserSettings, BrowserDownloadState } from './browser';
+import { BrowserState, BrowserHistoryEntry, BrowserNavigationState, TabInfo, BookmarkEntry, ExtensionInfo, BrowserSettings, BrowserDownloadState, BrowserAuthDiagnostics } from './browser';
+import { BrowserActionableElement, BrowserConsoleEvent, BrowserFinding, BrowserFormModel, BrowserNetworkEvent, BrowserSiteStrategy, BrowserSnapshot, BrowserSurfaceEvalFixture, BrowserTaskMemory } from './browserIntelligence';
 import { SurfaceActionInput, SurfaceActionRecord, SurfaceActionKind } from '../actions/surfaceActionTypes';
+import { TaskMemoryRecord } from './model';
 
 export const IPC_CHANNELS = {
   GET_STATE: 'workspace:get-state',
@@ -13,6 +15,7 @@ export const IPC_CHANNELS = {
   EVENT_BROADCAST: 'workspace:event-broadcast',
   CREATE_TASK: 'workspace:create-task',
   UPDATE_TASK_STATUS: 'workspace:update-task-status',
+  SET_ACTIVE_TASK: 'workspace:set-active-task',
   ADD_LOG: 'workspace:add-log',
 
   // Execution split control (replaces old layout channels)
@@ -21,9 +24,11 @@ export const IPC_CHANNELS = {
 
   // Surface action channels
   SUBMIT_SURFACE_ACTION: 'workspace:submit-surface-action',
+  CANCEL_QUEUED_ACTION: 'workspace:cancel-queued-action',
   GET_RECENT_ACTIONS: 'workspace:get-recent-actions',
   GET_ACTIONS_BY_TARGET: 'workspace:get-actions-by-target',
   GET_ACTIONS_BY_TASK: 'workspace:get-actions-by-task',
+  GET_QUEUE_DIAGNOSTICS: 'workspace:get-queue-diagnostics',
   SURFACE_ACTION_UPDATE: 'workspace:surface-action-update',
 
   // Browser runtime channels (queries, management, UI features)
@@ -33,6 +38,16 @@ export const IPC_CHANNELS = {
   BROWSER_CLEAR_DATA: 'browser:clear-data',
   BROWSER_REPORT_BOUNDS: 'browser:report-bounds',
   BROWSER_GET_TABS: 'browser:get-tabs',
+  BROWSER_CAPTURE_TAB_SNAPSHOT: 'browser:capture-tab-snapshot',
+  BROWSER_GET_ACTIONABLE_ELEMENTS: 'browser:get-actionable-elements',
+  BROWSER_GET_FORM_MODEL: 'browser:get-form-model',
+  BROWSER_GET_CONSOLE_EVENTS: 'browser:get-console-events',
+  BROWSER_GET_NETWORK_EVENTS: 'browser:get-network-events',
+  BROWSER_RECORD_FINDING: 'browser:record-finding',
+  BROWSER_GET_TASK_MEMORY: 'browser:get-task-memory',
+  BROWSER_GET_SITE_STRATEGY: 'browser:get-site-strategy',
+  BROWSER_SAVE_SITE_STRATEGY: 'browser:save-site-strategy',
+  BROWSER_EXPORT_SURFACE_EVAL_FIXTURE: 'browser:export-surface-eval-fixture',
 
   // Bookmarks
   BROWSER_ADD_BOOKMARK: 'browser:add-bookmark',
@@ -56,6 +71,8 @@ export const IPC_CHANNELS = {
   // Settings
   BROWSER_GET_SETTINGS: 'browser:get-settings',
   BROWSER_UPDATE_SETTINGS: 'browser:update-settings',
+  BROWSER_GET_AUTH_DIAGNOSTICS: 'browser:get-auth-diagnostics',
+  BROWSER_CLEAR_GOOGLE_AUTH_STATE: 'browser:clear-google-auth-state',
 
   // Extensions
   BROWSER_LOAD_EXTENSION: 'browser:load-extension',
@@ -72,6 +89,15 @@ export const IPC_CHANNELS = {
   BROWSER_NAV_UPDATE: 'browser:nav-update',
   BROWSER_FIND_UPDATE: 'browser:find-update',
 
+  // Model channels
+  MODEL_INVOKE: 'model:invoke',
+  MODEL_CANCEL: 'model:cancel',
+  MODEL_GET_PROVIDERS: 'model:get-providers',
+  MODEL_GET_TASK_MEMORY: 'model:get-task-memory',
+  MODEL_RESOLVE: 'model:resolve',
+  MODEL_HANDOFF: 'model:handoff',
+  MODEL_PROGRESS: 'model:progress',
+
   // Terminal session channels
   TERMINAL_START_SESSION: 'terminal:start-session',
   TERMINAL_GET_SESSION: 'terminal:get-session',
@@ -87,8 +113,9 @@ export interface WorkspaceAPI {
   getState(): Promise<AppState>;
   getRole(): Promise<PhysicalWindowRole>;
 
-  createTask(title: string): Promise<void>;
+  createTask(title: string): Promise<{ id: string; title: string }>;
   updateTaskStatus(taskId: string, status: TaskStatus): Promise<void>;
+  setActiveTask(taskId: string | null): Promise<void>;
 
   addLog(level: LogLevel, source: LogSource, message: string, taskId?: string): Promise<void>;
 
@@ -99,9 +126,11 @@ export interface WorkspaceAPI {
   // Surface actions
   actions: {
     submit(input: SurfaceActionInput): Promise<SurfaceActionRecord>;
+    cancelQueued(actionId: string): Promise<SurfaceActionRecord>;
     listRecent(limit?: number): Promise<SurfaceActionRecord[]>;
     listByTarget(target: 'browser' | 'terminal', limit?: number): Promise<SurfaceActionRecord[]>;
     listByTask(taskId: string): Promise<SurfaceActionRecord[]>;
+    getQueueDiagnostics(): Promise<{ browser: { active: string | null; queueLength: number }; terminal: { active: string | null; queueLength: number } }>;
     onUpdate(callback: (record: SurfaceActionRecord) => void): void;
   };
 
@@ -116,6 +145,16 @@ export interface WorkspaceAPI {
     clearData(): Promise<void>;
     reportBounds(bounds: { x: number; y: number; width: number; height: number }): Promise<void>;
     getTabs(): Promise<TabInfo[]>;
+    captureTabSnapshot(tabId?: string): Promise<BrowserSnapshot>;
+    getActionableElements(tabId?: string): Promise<BrowserActionableElement[]>;
+    getFormModel(tabId?: string): Promise<BrowserFormModel[]>;
+    getConsoleEvents(tabId?: string, since?: number): Promise<BrowserConsoleEvent[]>;
+    getNetworkEvents(tabId?: string, since?: number): Promise<BrowserNetworkEvent[]>;
+    recordFinding(input: { taskId: string; tabId?: string; title: string; summary: string; severity?: BrowserFinding['severity']; evidence?: string[]; snapshotId?: string | null }): Promise<BrowserFinding>;
+    getTaskMemory(taskId: string): Promise<BrowserTaskMemory>;
+    getSiteStrategy(origin: string): Promise<BrowserSiteStrategy | null>;
+    saveSiteStrategy(input: Partial<BrowserSiteStrategy> & { origin: string }): Promise<BrowserSiteStrategy>;
+    exportSurfaceEvalFixture(input: { name: string; tabId?: string }): Promise<BrowserSurfaceEvalFixture>;
     // Bookmarks
     addBookmark(url: string, title: string): Promise<BookmarkEntry>;
     removeBookmark(bookmarkId: string): Promise<void>;
@@ -134,6 +173,8 @@ export interface WorkspaceAPI {
     // Settings
     getSettings(): Promise<BrowserSettings>;
     updateSettings(settings: Partial<BrowserSettings>): Promise<void>;
+    getAuthDiagnostics(): Promise<BrowserAuthDiagnostics>;
+    clearGoogleAuthState(): Promise<{ cleared: number }>;
     // Extensions
     loadExtension(path: string): Promise<ExtensionInfo | null>;
     removeExtension(extensionId: string): Promise<void>;
@@ -142,15 +183,28 @@ export interface WorkspaceAPI {
     getDownloads(): Promise<BrowserDownloadState[]>;
     cancelDownload(downloadId: string): Promise<void>;
     clearDownloads(): Promise<void>;
+    // Cookie sync
+    reimportCookies(): Promise<{ imported: number; failed: number; domains: string[] }>;
     // Subscriptions
     onStateUpdate(callback: (state: BrowserState) => void): void;
     onNavUpdate(callback: (nav: BrowserNavigationState) => void): void;
     onFindUpdate(callback: (find: { activeMatch: number; totalMatches: number }) => void): void;
   };
 
+  // Model API (invocation, routing, handoff)
+  model: {
+    invoke(taskId: string, prompt: string, owner?: string, options?: { systemPrompt?: string; cwd?: string }): Promise<any>;
+    cancel(taskId: string): Promise<boolean>;
+    getProviders(): Promise<Record<string, any>>;
+    getTaskMemory(taskId: string): Promise<TaskMemoryRecord>;
+    resolve(prompt: string, explicitOwner?: string): Promise<string>;
+    handoff(taskId: string, from: string, to: string): Promise<any>;
+    onProgress(callback: (progress: any) => void): void;
+  };
+
   // Terminal session API (raw PTY I/O, queries, subscriptions)
   terminal: {
-    startSession(): Promise<TerminalSessionInfo>;
+    startSession(cols?: number, rows?: number): Promise<TerminalSessionInfo>;
     getSession(): Promise<TerminalSessionInfo | null>;
     write(data: string): Promise<void>;
     resize(cols: number, rows: number): Promise<void>;

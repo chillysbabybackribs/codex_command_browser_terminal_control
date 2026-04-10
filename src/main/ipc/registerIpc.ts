@@ -6,10 +6,14 @@ import { AppEventType } from '../../shared/types/events';
 import { getRoleByWebContentsId } from '../windows/windowManager';
 import { generateId } from '../../shared/utils/ids';
 import { TaskRecord, ExecutionLayoutPreset, TaskStatus, LogLevel, LogSource } from '../../shared/types/appState';
+import { ActionType } from '../state/actions';
 import { terminalService } from '../terminal/TerminalService';
 import { browserService } from '../browser/BrowserService';
 import { surfaceActionRouter } from '../actions/SurfaceActionRouter';
 import { SurfaceActionInput } from '../../shared/actions/surfaceActionTypes';
+import { modelRouter } from '../models/index';
+import type { ProviderId, ModelOwner } from '../../shared/types/model';
+import { buildAgentSystemPrompt } from '../models/agentProtocol';
 
 export function registerIpc(): void {
   ipcMain.handle(IPC_CHANNELS.GET_STATE, () => {
@@ -25,10 +29,12 @@ export function registerIpc(): void {
       id: generateId('task'),
       title,
       status: 'queued',
+      owner: 'user',
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
     eventBus.emit(AppEventType.TASK_CREATED, { task });
+    return { id: task.id, title: task.title };
   });
 
   ipcMain.handle(IPC_CHANNELS.UPDATE_TASK_STATUS, (_event, taskId: string, status: TaskStatus) => {
@@ -40,6 +46,10 @@ export function registerIpc(): void {
     if (status === 'completed') {
       eventBus.emit(AppEventType.TASK_COMPLETED, { taskId });
     }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SET_ACTIVE_TASK, (_event, taskId: string | null) => {
+    appStateStore.dispatch({ type: ActionType.SET_ACTIVE_TASK, taskId });
   });
 
   ipcMain.handle(IPC_CHANNELS.ADD_LOG, (_event, level: LogLevel, source: LogSource, message: string, taskId?: string) => {
@@ -70,6 +80,14 @@ export function registerIpc(): void {
     return surfaceActionRouter.submit(input);
   });
 
+  ipcMain.handle(IPC_CHANNELS.CANCEL_QUEUED_ACTION, (_event, actionId: string) => {
+    return surfaceActionRouter.cancelQueuedAction(actionId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.GET_QUEUE_DIAGNOSTICS, () => {
+    return surfaceActionRouter.getQueueDiagnostics();
+  });
+
   ipcMain.handle(IPC_CHANNELS.GET_RECENT_ACTIONS, (_event, limit?: number) => {
     return surfaceActionRouter.getRecentActions(limit);
   });
@@ -83,8 +101,8 @@ export function registerIpc(): void {
   });
 
   // Terminal session IPC handlers
-  ipcMain.handle(IPC_CHANNELS.TERMINAL_START_SESSION, () => {
-    return terminalService.startSession();
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_START_SESSION, (_event, cols?: number, rows?: number) => {
+    return terminalService.startSession(cols, rows);
   });
 
   ipcMain.handle(IPC_CHANNELS.TERMINAL_GET_SESSION, () => {
@@ -128,6 +146,36 @@ export function registerIpc(): void {
   ipcMain.handle(IPC_CHANNELS.BROWSER_GET_TABS, () => {
     return browserService.getTabs();
   });
+  ipcMain.handle(IPC_CHANNELS.BROWSER_CAPTURE_TAB_SNAPSHOT, (_event, tabId?: string) => {
+    return browserService.captureTabSnapshot(tabId);
+  });
+  ipcMain.handle(IPC_CHANNELS.BROWSER_GET_ACTIONABLE_ELEMENTS, (_event, tabId?: string) => {
+    return browserService.getActionableElements(tabId);
+  });
+  ipcMain.handle(IPC_CHANNELS.BROWSER_GET_FORM_MODEL, (_event, tabId?: string) => {
+    return browserService.getFormModel(tabId);
+  });
+  ipcMain.handle(IPC_CHANNELS.BROWSER_GET_CONSOLE_EVENTS, (_event, tabId?: string, since?: number) => {
+    return browserService.getConsoleEvents(tabId, since);
+  });
+  ipcMain.handle(IPC_CHANNELS.BROWSER_GET_NETWORK_EVENTS, (_event, tabId?: string, since?: number) => {
+    return browserService.getNetworkEvents(tabId, since);
+  });
+  ipcMain.handle(IPC_CHANNELS.BROWSER_RECORD_FINDING, (_event, input: { taskId: string; tabId?: string; title: string; summary: string; severity?: 'info' | 'warning' | 'critical'; evidence?: string[]; snapshotId?: string | null }) => {
+    return browserService.recordTabFinding(input);
+  });
+  ipcMain.handle(IPC_CHANNELS.BROWSER_GET_TASK_MEMORY, (_event, taskId: string) => {
+    return browserService.getTaskBrowserMemory(taskId);
+  });
+  ipcMain.handle(IPC_CHANNELS.BROWSER_GET_SITE_STRATEGY, (_event, origin: string) => {
+    return browserService.getSiteStrategy(origin);
+  });
+  ipcMain.handle(IPC_CHANNELS.BROWSER_SAVE_SITE_STRATEGY, (_event, input: { origin: string; primaryRoutes?: string[]; primaryLabels?: string[]; panelKeywords?: string[]; notes?: string[] }) => {
+    return browserService.saveSiteStrategy(input);
+  });
+  ipcMain.handle(IPC_CHANNELS.BROWSER_EXPORT_SURFACE_EVAL_FIXTURE, (_event, input: { name: string; tabId?: string }) => {
+    return browserService.exportSurfaceEvalFixture(input);
+  });
 
   // Bookmarks
   ipcMain.handle(IPC_CHANNELS.BROWSER_ADD_BOOKMARK, (_event, url: string, title: string) => {
@@ -157,6 +205,8 @@ export function registerIpc(): void {
   // Settings
   ipcMain.handle(IPC_CHANNELS.BROWSER_GET_SETTINGS, () => { return browserService.getSettings(); });
   ipcMain.handle(IPC_CHANNELS.BROWSER_UPDATE_SETTINGS, (_event, settings: any) => { browserService.updateSettings(settings); });
+  ipcMain.handle(IPC_CHANNELS.BROWSER_GET_AUTH_DIAGNOSTICS, () => { return browserService.getAuthDiagnostics(); });
+  ipcMain.handle(IPC_CHANNELS.BROWSER_CLEAR_GOOGLE_AUTH_STATE, () => { return browserService.clearGoogleAuthState(); });
 
   // Extensions
   ipcMain.handle(IPC_CHANNELS.BROWSER_LOAD_EXTENSION, async (_event, extPath: string) => { return browserService.loadExtension(extPath); });
@@ -167,4 +217,43 @@ export function registerIpc(): void {
   ipcMain.handle(IPC_CHANNELS.BROWSER_GET_DOWNLOADS, () => { return browserService.getDownloads(); });
   ipcMain.handle(IPC_CHANNELS.BROWSER_CANCEL_DOWNLOAD, (_event, downloadId: string) => { browserService.cancelDownload(downloadId); });
   ipcMain.handle(IPC_CHANNELS.BROWSER_CLEAR_DOWNLOADS, () => { browserService.clearDownloads(); });
+
+  // Cookie re-import
+  ipcMain.handle('browser:reimport-cookies', async () => {
+    return browserService.reimportChromeCookies();
+  });
+
+  // ── Model IPC handlers ────────────────────────────────────────────
+
+  ipcMain.handle(IPC_CHANNELS.MODEL_INVOKE, async (_event, taskId: string, prompt: string, owner?: string, options?: { systemPrompt?: string; cwd?: string }) => {
+    const resolvedOwner = owner
+      ? owner as ProviderId
+      : modelRouter.resolve(prompt);
+    const defaultSystemPrompt = 'You are an AI assistant inside V1 Workspace.';
+    const mergedOptions = {
+      ...options,
+      systemPrompt: options?.systemPrompt || defaultSystemPrompt,
+    };
+    return modelRouter.dispatch(taskId, prompt, resolvedOwner, mergedOptions);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MODEL_CANCEL, (_event, taskId: string) => {
+    return modelRouter.cancel(taskId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MODEL_GET_PROVIDERS, () => {
+    return modelRouter.getProviderStatuses();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MODEL_GET_TASK_MEMORY, (_event, taskId: string) => {
+    return modelRouter.getTaskMemory(taskId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MODEL_RESOLVE, (_event, prompt: string, explicitOwner?: string) => {
+    return modelRouter.resolve(prompt, explicitOwner as ModelOwner | undefined);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MODEL_HANDOFF, (_event, taskId: string, from: string, to: string) => {
+    return modelRouter.handoff(taskId, from as ProviderId, to as ProviderId);
+  });
 }

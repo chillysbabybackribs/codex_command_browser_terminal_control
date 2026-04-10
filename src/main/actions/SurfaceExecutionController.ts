@@ -36,10 +36,23 @@ export class SurfaceExecutionController {
     return this.queue.length;
   }
 
+  /** Remove a specific queued action by ID. Returns true if found and removed. */
+  cancelById(id: string, reason: string): boolean {
+    const idx = this.queue.findIndex(a => a.id === id);
+    if (idx === -1) return false;
+    const [removed] = this.queue.splice(idx, 1);
+    this.onPolicyFail(removed, reason);
+    return true;
+  }
+
   private executeImmediate(action: SurfaceAction): void {
     // Fire-and-forget — bypass does not occupy the active slot or touch the queue.
     // Errors are handled inside the execute callback (router).
-    Promise.resolve(this.execute(action)).catch(() => {});
+    try {
+      Promise.resolve(this.execute(action)).catch(() => {});
+    } catch {
+      // Swallow synchronous throws from callback — bypass must not propagate.
+    }
   }
 
   private cancelQueued(reason: string): void {

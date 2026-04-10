@@ -62,8 +62,8 @@ describe('summarizePayload', () => {
 });
 
 describe('action kind constants', () => {
-  it('BROWSER_ACTION_KINDS has 10 entries', () => {
-    expect(BROWSER_ACTION_KINDS).toHaveLength(10);
+  it('BROWSER_ACTION_KINDS has 15 entries', () => {
+    expect(BROWSER_ACTION_KINDS).toHaveLength(15);
     expect(BROWSER_ACTION_KINDS.every(k => k.startsWith('browser.'))).toBe(true);
   });
 
@@ -73,7 +73,7 @@ describe('action kind constants', () => {
   });
 
   it('ALL_ACTION_KINDS is the union', () => {
-    expect(ALL_ACTION_KINDS).toHaveLength(14);
+    expect(ALL_ACTION_KINDS).toHaveLength(19);
     expect(ALL_ACTION_KINDS).toEqual([...BROWSER_ACTION_KINDS, ...TERMINAL_ACTION_KINDS]);
   });
 });

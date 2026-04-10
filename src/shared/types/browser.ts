@@ -123,6 +123,17 @@ export type BrowserSettings = {
   javascript: boolean;
   images: boolean;
   popups: boolean;
+  importChromeCookies: boolean | null; // null = never asked, true = opted in, false = opted out
+};
+
+export type BrowserAuthDiagnostics = {
+  totalCookies: number;
+  googleCookieCount: number;
+  importChromeCookies: boolean | null;
+  googleAuthCompatibilityActive: boolean;
+  lastGoogleCookieMismatchAt: number | null;
+  activeTabUserAgent: string;
+  activeTabHasElectronUA: boolean;
 };
 
 // ─── Errors ─────────────────────────────────────────────────────────────────
@@ -162,6 +173,7 @@ export function createDefaultSettings(): BrowserSettings {
     javascript: true,
     images: true,
     popups: false,
+    importChromeCookies: null,
   };
 }
 

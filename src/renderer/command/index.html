@@ -12,139 +12,115 @@
   <link rel="stylesheet" href="command.css">
 </head>
 <body>
-  <div class="app-shell">
-    <div class="window-container">
-      <header class="window-header">
-        <div class="role-badge role-command"><span class="dot"></span>COMMAND CENTER</div>
-        <div class="task-summary" id="taskSummary">No active task</div>
-      </header>
+  <div class="cc-shell">
 
-      <!-- Surface State Panel -->
-      <div class="surface-state-panel">
-        <div class="surface-state-section browser-state">
-          <div class="surface-state-header">
-            <span class="surface-state-label">Browser</span>
-            <span class="surface-state-status" id="browserStateStatus">idle</span>
+    <!-- Header — full width -->
+    <header class="cc-header">
+      <span class="cc-header-title">COMMAND CENTER</span>
+      <span class="cc-header-task" id="taskSummary">No active task</span>
+    </header>
+
+    <!-- Main area: left content + right logs -->
+    <div class="cc-main">
+
+      <!-- Left column: metric boxes + chat -->
+      <div class="cc-left">
+
+        <!-- Codex metrics row -->
+        <div class="cc-metrics">
+          <div class="cc-metric-box" id="metricContext">
+            <div class="cc-metric-label">Codex All Time</div>
+            <div class="cc-metric-value" id="metricContextValue">...</div>
+            <div class="cc-metric-sub" id="metricContextSub">loading</div>
+            <div class="cc-metric-bar"><div class="cc-metric-bar-fill" id="metricContextBar"></div></div>
           </div>
-          <div class="surface-state-details">
-            <div class="state-row">
-              <span class="state-key">URL</span>
-              <span class="state-value" id="browserStateUrl">-</span>
-            </div>
-            <div class="state-row">
-              <span class="state-key">Title</span>
-              <span class="state-value" id="browserStateTitle">-</span>
-            </div>
-            <div class="state-row">
-              <span class="state-key">Tabs</span>
-              <span class="state-value tab-id-list" id="browserStateTabs">-</span>
-            </div>
-            <div class="state-row state-row-inline">
-              <span class="state-tag" id="browserStateLoading">idle</span>
-              <span class="state-tag" id="browserStateBack">back: no</span>
-              <span class="state-tag" id="browserStateForward">fwd: no</span>
-            </div>
+          <div class="cc-metric-box" id="metric5h">
+            <div class="cc-metric-label">Codex 5h</div>
+            <div class="cc-metric-value" id="metric5hValue">...</div>
+            <div class="cc-metric-sub" id="metric5hSub">loading</div>
+            <div class="cc-metric-bar"><div class="cc-metric-bar-fill" id="metric5hBar"></div></div>
           </div>
-        </div>
-        <div class="surface-state-section terminal-state">
-          <div class="surface-state-header">
-            <span class="surface-state-label">Terminal</span>
-            <span class="surface-state-status" id="terminalStateStatus">no session</span>
+          <div class="cc-metric-box" id="metricWeekly">
+            <div class="cc-metric-label">Codex Week</div>
+            <div class="cc-metric-value" id="metricWeeklyValue">...</div>
+            <div class="cc-metric-sub" id="metricWeeklySub">loading</div>
+            <div class="cc-metric-bar"><div class="cc-metric-bar-fill" id="metricWeeklyBar"></div></div>
           </div>
-          <div class="surface-state-details">
-            <div class="state-row">
-              <span class="state-key">Shell</span>
-              <span class="state-value" id="terminalStateShell">untracked</span>
-            </div>
-            <div class="state-row">
-              <span class="state-key">Last Dispatched</span>
-              <span class="state-value" id="terminalStateCommand">-</span>
-            </div>
-            <div class="state-row state-row-inline">
-              <span class="state-tag" id="terminalStateDispatch">no dispatch</span>
-              <span class="state-tag" id="terminalStatePid">-</span>
-              <span class="state-tag" id="terminalStateDims">-</span>
+          <div class="cc-metric-box cc-metric-controls">
+            <div class="cc-metric-label">Threads</div>
+            <div class="cc-metric-value" id="metricCreditsValue">...</div>
+            <div class="cc-controls-group">
+              <div class="cc-toggle-row" id="modelSelector">
+                <button class="cc-toggle active" data-owner="auto">Auto</button>
+                <button class="cc-toggle" data-owner="codex">Codex</button>
+                <button class="cc-toggle" data-owner="haiku">Haiku</button>
+              </div>
+              <div class="cc-toggle-row" id="splitSelector">
+                <button class="cc-toggle active" data-preset="balanced">Bal</button>
+                <button class="cc-toggle" data-preset="focus-browser">Brws</button>
+                <button class="cc-toggle" data-preset="focus-terminal">Term</button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div class="controls-bar">
-        <div class="control-group">
-          <span class="control-label">Execution Split:</span>
-          <div class="layout-controls" id="layoutControls">
-            <button class="btn active" data-preset="balanced">Balanced</button>
-            <button class="btn" data-preset="focus-browser">Browser</button>
-            <button class="btn" data-preset="focus-terminal">Terminal</button>
+        <!-- Haiku metrics row -->
+        <div class="cc-metrics">
+          <div class="cc-metric-box">
+            <div class="cc-metric-label">Haiku Tokens</div>
+            <div class="cc-metric-value" id="haikuTokensValue">0</div>
+            <div class="cc-metric-sub" id="haikuTokensSub">no usage yet</div>
+            <div class="cc-metric-bar"><div class="cc-metric-bar-fill" id="haikuTokensBar"></div></div>
+          </div>
+          <div class="cc-metric-box">
+            <div class="cc-metric-label">Haiku Cost</div>
+            <div class="cc-metric-value" id="haikuCostValue">$0.00</div>
+            <div class="cc-metric-sub" id="haikuCostSub">this session</div>
+            <div class="cc-metric-bar"><div class="cc-metric-bar-fill" id="haikuCostBar"></div></div>
+          </div>
+          <div class="cc-metric-box">
+            <div class="cc-metric-label">Haiku Turns</div>
+            <div class="cc-metric-value" id="haikuTurnsValue">0</div>
+            <div class="cc-metric-sub" id="haikuTurnsSub">this session</div>
+            <div class="cc-metric-bar"><div class="cc-metric-bar-fill" id="haikuTurnsBar"></div></div>
+          </div>
+          <div class="cc-metric-box">
+            <div class="cc-metric-label">Session Total</div>
+            <div class="cc-metric-value" id="sessionTotalValue">$0.00</div>
+            <div class="cc-metric-sub" id="sessionTotalSub">all models</div>
+            <div class="cc-metric-bar"><div class="cc-metric-bar-fill" id="sessionTotalBar"></div></div>
           </div>
         </div>
-      </div>
 
-      <!-- Action Composer -->
-      <div class="action-composer" id="actionComposer">
-        <div class="action-composer-row">
-          <div class="action-target-selector">
-            <button class="target-btn active" data-target="browser" id="targetBrowserBtn">Browser</button>
-            <button class="target-btn" data-target="terminal" id="targetTerminalBtn">Terminal</button>
-          </div>
-          <select class="action-kind-select" id="actionKindSelect">
-            <option value="browser.navigate">Navigate</option>
-          </select>
-          <input type="text" class="action-payload-input" id="actionPayloadInput" placeholder="URL..." autocomplete="off">
-          <select class="action-tab-picker" id="actionTabPicker" style="display:none"></select>
-          <button class="btn primary btn-sm" id="actionSubmitBtn">Execute</button>
+        <!-- Chat thread -->
+        <div class="cc-chat" id="chatThread">
+          <div class="cc-chat-empty" id="chatEmptyState">Send a message to start a conversation.</div>
+        </div>
+
+        <!-- Input footer -->
+        <div class="cc-input-footer">
+          <input type="text" class="cc-input" id="chatInput" placeholder="Send a message..." autocomplete="off">
+          <button class="cc-send-btn" id="chatSubmitBtn">Send</button>
         </div>
       </div>
 
-      <!-- Active Actions (collapsible) -->
-      <div class="actions-panel active-actions-panel collapsed" id="activeActionsPanel">
-        <div class="actions-panel-header" id="activeActionsHeader">
-          <span class="actions-title">Active Actions</span>
-          <span class="actions-count" id="activeActionsCount">0</span>
+      <!-- Right column: logs (full height) -->
+      <div class="cc-logs">
+        <div class="cc-logs-header">
+          <span class="cc-logs-title">Logs</span>
+          <button class="cc-logs-clear" id="logsClearBtn">Clear</button>
         </div>
-        <div class="actions-list" id="activeActionsList">
-          <div class="empty-state">No active actions</div>
-        </div>
-      </div>
-
-      <!-- Recent Actions (collapsible) -->
-      <div class="actions-panel collapsed" id="recentActionsPanel">
-        <div class="actions-panel-header" id="recentActionsHeader">
-          <span class="actions-title">Recent Actions</span>
-          <span class="actions-count" id="recentActionsCount">0</span>
-        </div>
-        <div class="actions-list" id="recentActionsList">
-          <div class="empty-state">No recent actions</div>
-        </div>
-      </div>
-
-      <div class="window-body">
-        <div class="task-list collapsed" id="taskList"><div class="empty-state">No tasks yet</div></div>
-      </div>
-
-      <div class="input-area">
-        <input type="text" id="taskInput" placeholder="Enter a task..." autocomplete="off">
-        <button class="btn primary" id="submitBtn">Submit</button>
-      </div>
-
-      <div class="status-bar">
-        <div class="status-indicator"><span class="status-dot done" id="syncDot"></span><span id="syncLabel">Synced</span></div>
-        <span id="splitLabel">Split: 50/50</span>
-        <span id="taskCount">Tasks: 0</span>
-        <button class="btn btn-sm sidebar-toggle-btn" id="sidebarToggleBtn">Logs</button>
+        <div class="cc-logs-stream" id="logStream"></div>
       </div>
     </div>
 
-    <!-- Log Sidebar -->
-    <div class="log-sidebar" id="logSidebar">
-      <div class="log-sidebar-header">
-        <span class="log-sidebar-title">Logs</span>
-        <div class="log-sidebar-controls">
-          <button class="btn btn-sm" id="sidebarPinBtn" title="Pin sidebar open">Pin</button>
-          <button class="btn btn-sm" id="sidebarCloseBtn" title="Close sidebar">&times;</button>
-        </div>
-      </div>
-      <div class="log-stream" id="logStream"></div>
+    <!-- Status bar — full width -->
+    <div class="cc-status">
+      <span id="syncLabel">synced</span>
+      <span id="splitLabel">split 50/50</span>
+      <span id="modelLabel">—</span>
+      <span id="sessionLabel">—</span>
+      <span id="taskCount">tasks: 0</span>
     </div>
   </div>
   <script type="module" src="command.js"></script>

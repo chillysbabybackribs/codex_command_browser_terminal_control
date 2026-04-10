@@ -3,3 +3,5 @@ dist/
 release/
 *.js.map
 .DS_Store
+.env
+.superpowers/

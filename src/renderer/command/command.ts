@@ -1,575 +1,775 @@
-export {};
-
-function formatTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
-function escapeHtml(str: string): string {
-  const div = document.createElement('div'); div.textContent = str; return div.innerHTML;
-}
-
-// ─── Action Kind Definitions ───────────────────────────────────────────────
-
-type ActionKindDef = { value: string; label: string; hasInput: boolean; placeholder: string };
-
-const BROWSER_KINDS: ActionKindDef[] = [
-  { value: 'browser.navigate', label: 'Navigate', hasInput: true, placeholder: 'URL...' },
-  { value: 'browser.back', label: 'Back', hasInput: false, placeholder: '' },
-  { value: 'browser.forward', label: 'Forward', hasInput: false, placeholder: '' },
-  { value: 'browser.reload', label: 'Reload', hasInput: false, placeholder: '' },
-  { value: 'browser.stop', label: 'Stop', hasInput: false, placeholder: '' },
-  { value: 'browser.create-tab', label: 'New Tab', hasInput: true, placeholder: 'URL (optional)...' },
-  { value: 'browser.close-tab', label: 'Close Tab', hasInput: true, placeholder: 'Tab ID...' },
-  { value: 'browser.activate-tab', label: 'Switch Tab', hasInput: true, placeholder: 'Tab ID...' },
-];
-
-const TERMINAL_KINDS: ActionKindDef[] = [
-  { value: 'terminal.execute', label: 'Execute', hasInput: true, placeholder: 'Command...' },
-  { value: 'terminal.write', label: 'Write', hasInput: true, placeholder: 'Input...' },
-  { value: 'terminal.restart', label: 'Restart', hasInput: false, placeholder: '' },
-  { value: 'terminal.interrupt', label: 'Interrupt', hasInput: false, placeholder: '' },
-];
+import { formatTime, escapeHtml } from '../shared/utils.js';
+import type { CodexItem } from '../../shared/types/model.js';
 
 // ─── DOM ────────────────────────────────────────────────────────────────────
 
-const taskInput = document.getElementById('taskInput') as HTMLInputElement;
-const submitBtn = document.getElementById('submitBtn')!;
-const taskList = document.getElementById('taskList')!;
-const logStream = document.getElementById('logStream')!;
 const taskSummary = document.getElementById('taskSummary')!;
-const layoutControls = document.getElementById('layoutControls')!;
 const splitLabel = document.getElementById('splitLabel')!;
+const modelLabel = document.getElementById('modelLabel')!;
+const sessionLabel = document.getElementById('sessionLabel')!;
 const taskCount = document.getElementById('taskCount')!;
+const logStream = document.getElementById('logStream')!;
+const logsClearBtn = document.getElementById('logsClearBtn')!;
 
-// Action composer
-const targetBrowserBtn = document.getElementById('targetBrowserBtn')!;
-const targetTerminalBtn = document.getElementById('targetTerminalBtn')!;
-const actionKindSelect = document.getElementById('actionKindSelect') as HTMLSelectElement;
-const actionPayloadInput = document.getElementById('actionPayloadInput') as HTMLInputElement;
-const actionTabPicker = document.getElementById('actionTabPicker') as HTMLSelectElement;
-const actionSubmitBtn = document.getElementById('actionSubmitBtn')!;
+// Codex metric boxes
+const metricContextValue = document.getElementById('metricContextValue')!;
+const metricContextSub = document.getElementById('metricContextSub')!;
+const metricContextBar = document.getElementById('metricContextBar')!;
+const metric5hValue = document.getElementById('metric5hValue')!;
+const metric5hSub = document.getElementById('metric5hSub')!;
+const metric5hBar = document.getElementById('metric5hBar')!;
+const metricWeeklyValue = document.getElementById('metricWeeklyValue')!;
+const metricWeeklySub = document.getElementById('metricWeeklySub')!;
+const metricWeeklyBar = document.getElementById('metricWeeklyBar')!;
+const metricCreditsValue = document.getElementById('metricCreditsValue')!;
 
-// Actions panels (split: active + recent)
-const activeActionsList = document.getElementById('activeActionsList')!;
-const activeActionsCount = document.getElementById('activeActionsCount')!;
-const recentActionsList = document.getElementById('recentActionsList')!;
-const recentActionsCount = document.getElementById('recentActionsCount')!;
+// Haiku metric boxes
+const haikuTokensValue = document.getElementById('haikuTokensValue')!;
+const haikuTokensSub = document.getElementById('haikuTokensSub')!;
+const haikuTokensBar = document.getElementById('haikuTokensBar')!;
+const haikuCostValue = document.getElementById('haikuCostValue')!;
+const haikuCostSub = document.getElementById('haikuCostSub')!;
+const haikuCostBar = document.getElementById('haikuCostBar')!;
+const haikuTurnsValue = document.getElementById('haikuTurnsValue')!;
+const haikuTurnsSub = document.getElementById('haikuTurnsSub')!;
+const sessionTotalValue = document.getElementById('sessionTotalValue')!;
+const sessionTotalSub = document.getElementById('sessionTotalSub')!;
 
-// Sidebar
-const logSidebar = document.getElementById('logSidebar')!;
-const sidebarToggleBtn = document.getElementById('sidebarToggleBtn')!;
-const sidebarPinBtn = document.getElementById('sidebarPinBtn')!;
-const sidebarCloseBtn = document.getElementById('sidebarCloseBtn')!;
+// Controls (in 4th metric box)
+const modelSelector = document.getElementById('modelSelector')!;
+const splitSelector = document.getElementById('splitSelector')!;
 
-// Collapsible panel headers
-const activeActionsHeader = document.getElementById('activeActionsHeader')!;
-const recentActionsHeader = document.getElementById('recentActionsHeader')!;
-const activeActionsPanel = document.getElementById('activeActionsPanel')!;
-const recentActionsPanel = document.getElementById('recentActionsPanel')!;
-
-// Surface State Panel
-const browserStateStatus = document.getElementById('browserStateStatus')!;
-const browserStateUrl = document.getElementById('browserStateUrl')!;
-const browserStateTitle = document.getElementById('browserStateTitle')!;
-const browserStateTabs = document.getElementById('browserStateTabs')!;
-const browserStateLoading = document.getElementById('browserStateLoading')!;
-const browserStateBack = document.getElementById('browserStateBack')!;
-const browserStateForward = document.getElementById('browserStateForward')!;
-const terminalStateStatus = document.getElementById('terminalStateStatus')!;
-const terminalStateCommand = document.getElementById('terminalStateCommand')!;
-const terminalStateDispatch = document.getElementById('terminalStateDispatch')!;
-const terminalStateShell = document.getElementById('terminalStateShell')!;
-const terminalStatePid = document.getElementById('terminalStatePid')!;
-const terminalStateDims = document.getElementById('terminalStateDims')!;
+// Chat
+const chatThread = document.getElementById('chatThread')!;
+const chatEmptyState = document.getElementById('chatEmptyState')!;
+const chatInput = document.getElementById('chatInput') as HTMLInputElement;
+const chatSubmitBtn = document.getElementById('chatSubmitBtn')!;
 
 // ─── State ──────────────────────────────────────────────────────────────────
 
-let currentTarget: 'browser' | 'terminal' = 'browser';
-let actionRecords: any[] = [];
-let cachedTabs: any[] = [];
+let selectedOwner: 'auto' | 'codex' | 'haiku' = 'auto';
+let chatCounter = 0;
+let renderedTaskMemoryKey: string | null = null;
+let currentRenderedTaskId: string | null = null;
+let chatAutoPinned = true;
+let chatScrollRaf: number | null = null;
+let chatScrollFramesRemaining = 0;
+let suppressChatScrollEvent = false;
 
-// ─── Target Selector ────────────────────────────────────────────────────────
+type LiveRunCard = {
+  root: HTMLElement;
+  meta: HTMLElement;
+  activity: HTMLElement;
+  output: HTMLElement;
+  seenThoughts: Set<string>;
+  pendingToolBlock: HTMLDetailsElement | null;
+  typingQueue: string[];
+  typingTimer: number | null;
+  activeThoughtEl: HTMLElement | null;
+  deferredToolEvents: Array<{ kind: 'call' | 'result'; text: string }>;
+};
 
-function setTarget(target: 'browser' | 'terminal'): void {
-  currentTarget = target;
-  targetBrowserBtn.classList.toggle('active', target === 'browser');
-  targetTerminalBtn.classList.toggle('active', target === 'terminal');
-  populateKinds();
+const liveRunCards = new Map<string, LiveRunCard>();
+
+// ─── Model Owner Selector ──────────────────────────────────────────────────
+
+function setModelOwner(owner: 'auto' | 'codex' | 'haiku'): void {
+  selectedOwner = owner;
+  modelSelector.querySelectorAll('.cc-toggle').forEach((btn) => {
+    (btn as HTMLElement).classList.toggle('active', (btn as HTMLElement).dataset.owner === owner);
+  });
 }
 
-targetBrowserBtn.addEventListener('click', () => setTarget('browser'));
-targetTerminalBtn.addEventListener('click', () => setTarget('terminal'));
-
-function populateKinds(): void {
-  const kinds = currentTarget === 'browser' ? BROWSER_KINDS : TERMINAL_KINDS;
-  actionKindSelect.innerHTML = kinds.map(k => `<option value="${k.value}">${k.label}</option>`).join('');
-  updatePayloadInput();
-}
-
-function getSelectedKindDef(): ActionKindDef | undefined {
-  const kinds = currentTarget === 'browser' ? BROWSER_KINDS : TERMINAL_KINDS;
-  return kinds.find(k => k.value === actionKindSelect.value);
-}
-
-function isTabPickerKind(kind: string): boolean {
-  return kind === 'browser.close-tab' || kind === 'browser.activate-tab';
-}
-
-function updatePayloadInput(): void {
-  const def = getSelectedKindDef();
-  const kind = actionKindSelect.value;
-
-  if (isTabPickerKind(kind)) {
-    actionPayloadInput.style.display = 'none';
-    actionTabPicker.style.display = '';
-    updateTabPicker();
-  } else {
-    actionPayloadInput.style.display = '';
-    actionTabPicker.style.display = 'none';
-    if (def && def.hasInput) {
-      actionPayloadInput.disabled = false;
-      actionPayloadInput.placeholder = def.placeholder;
-    } else {
-      actionPayloadInput.disabled = true;
-      actionPayloadInput.value = '';
-      actionPayloadInput.placeholder = 'No input needed';
-    }
-  }
-}
-
-function updateTabPicker(): void {
-  if (!isTabPickerKind(actionKindSelect.value)) return;
-  const prevVal = actionTabPicker.value;
-  if (cachedTabs.length === 0) {
-    actionTabPicker.innerHTML = '<option value="">No tabs available</option>';
-    actionTabPicker.disabled = true;
-  } else {
-    actionTabPicker.disabled = false;
-    actionTabPicker.innerHTML = cachedTabs.map((t: any) => {
-      const title = t.navigation?.title || t.navigation?.url || 'New Tab';
-      const shortTitle = title.length > 30 ? title.substring(0, 30) + '...' : title;
-      return `<option value="${escapeHtml(t.id)}">${escapeHtml(shortTitle)} [${escapeHtml(t.id.slice(-8))}]</option>`;
-    }).join('');
-    // Restore previous selection if still valid
-    if (prevVal && cachedTabs.some((t: any) => t.id === prevVal)) {
-      actionTabPicker.value = prevVal;
-    }
-  }
-}
-
-actionKindSelect.addEventListener('change', updatePayloadInput);
-
-// ─── Action Submission ──────────────────────────────────────────────────────
-
-async function submitAction(): Promise<void> {
-  const kind = actionKindSelect.value;
-  const def = getSelectedKindDef();
-  if (!def) return;
-
-  let payload: Record<string, unknown> = {};
-
-  if (kind === 'browser.navigate') {
-    const url = actionPayloadInput.value.trim();
-    if (!url) { actionPayloadInput.focus(); return; }
-    payload = { url };
-  } else if (kind === 'browser.create-tab') {
-    const url = actionPayloadInput.value.trim();
-    if (url) payload = { url };
-  } else if (kind === 'browser.close-tab') {
-    const tabId = actionTabPicker.value;
-    if (!tabId) { actionTabPicker.focus(); return; }
-    payload = { tabId };
-  } else if (kind === 'browser.activate-tab') {
-    const tabId = actionTabPicker.value;
-    if (!tabId) { actionTabPicker.focus(); return; }
-    payload = { tabId };
-  } else if (kind === 'terminal.execute') {
-    const command = actionPayloadInput.value.trim();
-    if (!command) { actionPayloadInput.focus(); return; }
-    payload = { command };
-  } else if (kind === 'terminal.write') {
-    const input = actionPayloadInput.value;
-    payload = { input };
-  }
-
-  actionSubmitBtn.setAttribute('disabled', '');
-
-  try {
-    await workspaceAPI.actions.submit({
-      target: currentTarget,
-      kind,
-      payload,
-    });
-    actionPayloadInput.value = '';
-  } catch (err: any) {
-    workspaceAPI.addLog('error', 'system', `Action submission failed: ${err.message || err}`);
-  } finally {
-    actionSubmitBtn.removeAttribute('disabled');
-  }
-}
-
-actionSubmitBtn.addEventListener('click', submitAction);
-actionPayloadInput.addEventListener('keydown', (e: KeyboardEvent) => {
-  if (e.key === 'Enter') submitAction();
+modelSelector.addEventListener('click', (e: Event) => {
+  const btn = (e.target as HTMLElement).closest('[data-owner]') as HTMLElement | null;
+  if (btn?.dataset.owner) setModelOwner(btn.dataset.owner as 'auto' | 'codex' | 'haiku');
 });
 
-// ─── Tasks ──────────────────────────────────────────────────────────────────
+// ─── Split Selector ────────────────────────────────────────────────────────
 
-function submitTask(): void {
-  const title = taskInput.value.trim(); if (!title) return;
-  taskInput.value = ''; workspaceAPI.createTask(title);
-}
-submitBtn.addEventListener('click', submitTask);
-taskInput.addEventListener('keydown', (e: KeyboardEvent) => { if (e.key === 'Enter') submitTask(); });
-
-layoutControls.addEventListener('click', (e: Event) => {
-  const target = e.target as HTMLElement;
-  if (target.dataset.preset) workspaceAPI.applyExecutionPreset(target.dataset.preset);
+splitSelector.addEventListener('click', (e: Event) => {
+  const btn = (e.target as HTMLElement).closest('[data-preset]') as HTMLElement | null;
+  if (btn?.dataset.preset) {
+    workspaceAPI.applyExecutionPreset(btn.dataset.preset as import('../../shared/types/appState').ExecutionLayoutPreset);
+  }
 });
 
-// ─── Surface State Rendering ────────────────────────────────────────────────
+// ─── Metric Box Rendering ──────────────────────────────────────────────────
 
-function renderBrowserSurfaceState(state: any): void {
-  const br = state.browserRuntime;
-  if (!br) {
-    browserStateStatus.textContent = 'idle';
-    browserStateStatus.className = 'surface-state-status';
-    browserStateUrl.textContent = '-';
-    browserStateTitle.textContent = '-';
-    browserStateTabs.innerHTML = '-';
-    cachedTabs = [];
-    browserStateLoading.textContent = 'idle';
-    browserStateLoading.className = 'state-tag';
-    browserStateBack.textContent = 'back: no';
-    browserStateBack.className = 'state-tag';
-    browserStateForward.textContent = 'fwd: no';
-    browserStateForward.className = 'state-tag';
-    updateTabPicker();
-    return;
+interface CodexStatusMetrics {
+  contextWindow?: { percentLeft: number; used: string; total: string };
+  limit5h?: { percentLeft: number; resetsAt: string };
+  limitWeekly?: { percentLeft: number; resetsAt: string };
+  credits?: number;
+}
+
+// Session-level token tracking (per provider)
+let haikuInputTokens = 0;
+let haikuOutputTokens = 0;
+let haikuTurnCount = 0;
+let codexSessionTokens = 0;
+let codexSessionTurns = 0;
+
+// Haiku 4.5 pricing: $0.80/MTok input, $4.00/MTok output
+const HAIKU_INPUT_COST_PER_TOKEN = 0.80 / 1_000_000;
+const HAIKU_OUTPUT_COST_PER_TOKEN = 4.00 / 1_000_000;
+
+function formatTokenCount(n: number): string {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+function formatCost(dollars: number): string {
+  if (dollars < 0.01) return `$${dollars.toFixed(4)}`;
+  if (dollars < 1) return `$${dollars.toFixed(3)}`;
+  return `$${dollars.toFixed(2)}`;
+}
+
+function renderCodexMetrics(metrics: CodexStatusMetrics): void {
+  if (metrics.contextWindow) {
+    const cw = metrics.contextWindow;
+    metricContextValue.textContent = cw.used;
+    metricContextSub.textContent = cw.total;
+    metricContextBar.style.width = `${100 - cw.percentLeft}%`;
   }
 
-  const nav = br.navigation;
-  browserStateStatus.textContent = br.surfaceStatus;
-  browserStateStatus.className = `surface-state-status ${br.surfaceStatus}`;
+  if (metrics.limit5h) {
+    const lim = metrics.limit5h;
+    metric5hValue.textContent = lim.resetsAt.split('/')[0]?.trim() || '0';
+    metric5hSub.textContent = lim.resetsAt.split('/')[1]?.trim() || '';
+    metric5hBar.style.width = `${100 - lim.percentLeft}%`;
+  }
 
-  browserStateUrl.textContent = nav.url || '-';
-  browserStateTitle.textContent = nav.title || '-';
+  if (metrics.limitWeekly) {
+    const lim = metrics.limitWeekly;
+    metricWeeklyValue.textContent = lim.resetsAt.split('/')[0]?.trim() || '0';
+    metricWeeklySub.textContent = lim.resetsAt.split('/')[1]?.trim() || '';
+    metricWeeklyBar.style.width = `${100 - lim.percentLeft}%`;
+  }
 
-  // Render tab list with IDs
-  const tabs = br.tabs || [];
-  const activeTabId = br.activeTabId || '';
-  cachedTabs = tabs;
-  if (tabs.length === 0) {
-    browserStateTabs.innerHTML = '-';
+  if (metrics.credits !== undefined) {
+    metricCreditsValue.textContent = String(metrics.credits);
+  }
+}
+
+function renderHaikuMetrics(): void {
+  const totalTokens = haikuInputTokens + haikuOutputTokens;
+  const cost = (haikuInputTokens * HAIKU_INPUT_COST_PER_TOKEN) + (haikuOutputTokens * HAIKU_OUTPUT_COST_PER_TOKEN);
+
+  haikuTokensValue.textContent = formatTokenCount(totalTokens);
+  haikuTokensSub.textContent = `in: ${formatTokenCount(haikuInputTokens)} / out: ${formatTokenCount(haikuOutputTokens)}`;
+  // Fill bar based on a $1 budget threshold
+  haikuTokensBar.style.width = `${Math.min(100, Math.round((totalTokens / 1_000_000) * 10))}%`;
+
+  haikuCostValue.textContent = formatCost(cost);
+  haikuCostSub.textContent = `$${(haikuInputTokens * HAIKU_INPUT_COST_PER_TOKEN).toFixed(4)} in / $${(haikuOutputTokens * HAIKU_OUTPUT_COST_PER_TOKEN).toFixed(4)} out`;
+  haikuCostBar.style.width = `${Math.min(100, Math.round(cost * 100))}%`;
+
+  haikuTurnsValue.textContent = String(haikuTurnCount);
+  haikuTurnsSub.textContent = `avg ${haikuTurnCount > 0 ? formatTokenCount(Math.round(totalTokens / haikuTurnCount)) : '0'}/turn`;
+
+  sessionTotalValue.textContent = formatCost(cost);
+  sessionTotalSub.textContent = `${haikuTurnCount + codexSessionTurns} turns total`;
+}
+
+function trackTokenUsage(result: any, provider: string): void {
+  if (!result?.usage) return;
+  const inputTok = result.usage.inputTokens || 0;
+  const outputTok = result.usage.outputTokens || 0;
+
+  if (provider === 'haiku') {
+    haikuInputTokens += inputTok;
+    haikuOutputTokens += outputTok;
+    haikuTurnCount++;
+    renderHaikuMetrics();
   } else {
-    browserStateTabs.innerHTML = tabs.map((t: any) => {
-      const isActive = t.id === activeTabId;
-      const title = t.navigation?.title || t.navigation?.url || 'New Tab';
-      const shortTitle = title.length > 20 ? title.substring(0, 20) + '...' : title;
-      return `<span class="tab-id-chip ${isActive ? 'active' : ''}" data-copy-id="${escapeHtml(t.id)}" title="${escapeHtml(t.id)} — ${escapeHtml(title)}">${escapeHtml(shortTitle)} <code>${escapeHtml(t.id.slice(-8))}</code></span>`;
-    }).join('');
+    codexSessionTokens += inputTok + outputTok;
+    codexSessionTurns++;
+    renderHaikuMetrics(); // Update session total
   }
-  updateTabPicker();
-
-  browserStateLoading.textContent = nav.isLoading ? 'loading' : 'idle';
-  browserStateLoading.className = `state-tag ${nav.isLoading ? 'loading' : ''}`;
-
-  browserStateBack.textContent = `back: ${nav.canGoBack ? 'yes' : 'no'}`;
-  browserStateBack.className = `state-tag ${nav.canGoBack ? 'active' : ''}`;
-
-  browserStateForward.textContent = `fwd: ${nav.canGoForward ? 'yes' : 'no'}`;
-  browserStateForward.className = `state-tag ${nav.canGoForward ? 'active' : ''}`;
 }
 
-function renderTerminalSurfaceState(state: any): void {
-  const session = state.terminalSession?.session;
-  const cmd = state.terminalCommand;
-
-  if (!session) {
-    terminalStateStatus.textContent = 'no session';
-    terminalStateStatus.className = 'surface-state-status';
-    terminalStateShell.textContent = 'untracked';
-    terminalStateCommand.textContent = '-';
-    terminalStateDispatch.textContent = 'no dispatch';
-    terminalStateDispatch.className = 'state-tag';
-    terminalStatePid.textContent = '-';
-    terminalStatePid.className = 'state-tag';
-    terminalStateDims.textContent = '-';
-    terminalStateDims.className = 'state-tag';
-    return;
-  }
-
-  const statusLabel = session.status === 'running' ? 'ready' : session.status;
-  terminalStateStatus.textContent = statusLabel;
-  terminalStateStatus.className = `surface-state-status ${session.status === 'running' ? 'ready' : session.status === 'error' || session.status === 'exited' ? 'error' : ''}`;
-
-  terminalStateShell.textContent = session.shell || 'untracked';
-
-  if (cmd) {
-    terminalStateCommand.textContent = cmd.lastDispatchedCommand || '-';
-    terminalStateDispatch.textContent = cmd.dispatched ? 'dispatching' : cmd.lastDispatchedCommand ? 'sent' : 'no dispatch';
-    terminalStateDispatch.className = `state-tag ${cmd.dispatched ? 'dispatching' : ''}`;
-  } else {
-    terminalStateCommand.textContent = '-';
-    terminalStateDispatch.textContent = 'no dispatch';
-    terminalStateDispatch.className = 'state-tag';
-  }
-
-  terminalStatePid.textContent = session.pid ? `PID ${session.pid}` : '-';
-  terminalStatePid.className = 'state-tag';
-  terminalStateDims.textContent = session.cols && session.rows ? `${session.cols}x${session.rows}` : '-';
-  terminalStateDims.className = 'state-tag';
-}
-
-// ─── Task & Log Rendering ───────────────────────────────────────────────────
-
-function renderTasks(tasks: any[], activeId: string | null): void {
-  if (tasks.length === 0) { taskList.innerHTML = '<div class="empty-state">No tasks yet</div>'; taskList.classList.add('collapsed'); return; }
-  taskList.classList.remove('collapsed');
-  taskList.innerHTML = tasks.slice().reverse().map((t: any) => {
-    const isActive = t.id === activeId;
-    return `<div class="task-item ${isActive ? 'active' : ''}"><span class="task-status ${t.status}"></span><span class="task-title">${escapeHtml(t.title)}</span><span class="task-time">${formatTime(t.createdAt)}</span></div>`;
-  }).join('');
-}
+// ─── Log Rendering ─────────────────────────────────────────────────────────
 
 let lastLogCount = 0;
 function renderLogs(logs: any[]): void {
   const newLogs = logs.slice(lastLogCount);
   for (const log of newLogs) {
-    const el = document.createElement('div'); el.className = `log-entry ${log.level}`;
-    el.innerHTML = `<span class="log-time">${formatTime(log.timestamp)}</span><span class="log-source">[${escapeHtml(log.source)}]</span><span class="log-message">${escapeHtml(log.message)}</span>`;
+    const el = document.createElement('div');
+    el.className = `log-entry ${log.level}`;
+    el.innerHTML = `<span class="log-time">${formatTime(log.timestamp)}</span><span class="log-source" data-source="${escapeHtml(log.source)}">[${escapeHtml(log.source)}]</span><span class="log-message">${escapeHtml(log.message)}</span>`;
     logStream.appendChild(el);
   }
-  lastLogCount = logs.length; logStream.scrollTop = logStream.scrollHeight;
+  lastLogCount = logs.length;
+  logStream.scrollTop = logStream.scrollHeight;
 }
 
-// ─── Action Rendering (split: active + recent) ─────────────────────────────
+logsClearBtn.addEventListener('click', () => {
+  logStream.innerHTML = '';
+  lastLogCount = 0;
+});
 
-function buildActionRowHtml(r: any): string {
-  const errorHtml = r.error
-    ? `<span class="action-result error">${escapeHtml(r.error)}</span>`
-    : '';
-  const resultHtml = !r.error && r.resultSummary
-    ? `<span class="action-result">${escapeHtml(r.resultSummary)}</span>`
-    : '';
-  return `<span class="action-status-dot ${r.status}"></span>` +
-    `<span class="action-target-badge ${r.target}">${r.target}</span>` +
-    `<span class="action-summary">${escapeHtml(r.payloadSummary)}</span>` +
-    resultHtml + errorHtml +
-    `<span class="action-time">${formatTime(r.createdAt)}</span>`;
+// ─── Chat Scroll ───────────────────────────────────────────────────────────
+
+function isChatNearBottom(threshold = 56): boolean {
+  const distanceFromBottom = chatThread.scrollHeight - (chatThread.scrollTop + chatThread.clientHeight);
+  return distanceFromBottom <= threshold;
 }
 
-function renderSplitActions(records: any[]): void {
-  actionRecords = records;
+function performChatScrollToBottom(): void {
+  suppressChatScrollEvent = true;
+  chatThread.scrollTop = chatThread.scrollHeight;
+  queueMicrotask(() => { suppressChatScrollEvent = false; });
+}
 
-  const active = records.filter((r: any) => r.status === 'queued' || r.status === 'running');
-  const recent = records.filter((r: any) => r.status !== 'queued' && r.status !== 'running');
+function scheduleChatScrollToBottom(force = false, frames = 3): void {
+  if (!force && !chatAutoPinned) return;
+  if (force) chatAutoPinned = true;
+  chatScrollFramesRemaining = Math.max(chatScrollFramesRemaining, frames);
+  if (chatScrollRaf !== null) return;
 
-  activeActionsCount.textContent = String(active.length);
-  recentActionsCount.textContent = String(recent.length);
+  const tick = () => {
+    performChatScrollToBottom();
+    chatScrollFramesRemaining -= 1;
+    if (chatScrollFramesRemaining > 0) {
+      chatScrollRaf = window.requestAnimationFrame(tick);
+      return;
+    }
+    chatScrollRaf = null;
+  };
 
-  // Auto-collapse when empty, auto-expand when non-empty
-  if (active.length === 0) {
-    activeActionsPanel.classList.add('collapsed');
-  } else {
-    activeActionsPanel.classList.remove('collapsed');
+  chatScrollRaf = window.requestAnimationFrame(tick);
+}
+
+chatThread.addEventListener('scroll', () => {
+  if (suppressChatScrollEvent) return;
+  chatAutoPinned = isChatNearBottom();
+});
+
+chatThread.addEventListener('toggle', (event: Event) => {
+  const target = event.target as HTMLElement | null;
+  if (!target?.classList.contains('chat-tool-details')) return;
+  scheduleChatScrollToBottom(true, 6);
+}, true);
+
+const chatResizeObserver = new ResizeObserver(() => {
+  scheduleChatScrollToBottom(false, 4);
+});
+chatResizeObserver.observe(chatThread);
+
+const chatMutationObserver = new MutationObserver(() => {
+  scheduleChatScrollToBottom(false, 5);
+});
+chatMutationObserver.observe(chatThread, {
+  childList: true,
+  subtree: true,
+  characterData: true,
+});
+
+// ─── Markdown Rendering ────────────────────────────────────────────────────
+
+function renderInlineMarkdown(text: string): string {
+  return escapeHtml(text)
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
+}
+
+function renderMarkdown(text: string): string {
+  const lines = text.replace(/\r\n/g, '\n').trim().split('\n');
+  const parts: string[] = [];
+  let paragraph: string[] = [];
+  let listItems: string[] = [];
+
+  const flushParagraph = () => {
+    if (paragraph.length === 0) return;
+    parts.push(`<p>${renderInlineMarkdown(paragraph.join('<br>'))}</p>`);
+    paragraph = [];
+  };
+
+  const flushList = () => {
+    if (listItems.length === 0) return;
+    parts.push(`<ul>${listItems.map(item => `<li>${renderInlineMarkdown(item)}</li>`).join('')}</ul>`);
+    listItems = [];
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      flushList();
+      const level = Math.min(3, heading[1].length);
+      parts.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+      continue;
+    }
+
+    if (trimmed.startsWith('- ')) {
+      flushParagraph();
+      listItems.push(trimmed.slice(2));
+      continue;
+    }
+
+    flushList();
+    paragraph.push(trimmed);
   }
 
-  if (active.length === 0) {
-    activeActionsList.innerHTML = '<div class="empty-state">No active actions</div>';
-  } else {
-    activeActionsList.innerHTML = active.slice().reverse().map((r: any) =>
-      `<div class="action-row status-${r.status}" data-action-id="${r.id}">${buildActionRowHtml(r)}</div>`
-    ).join('');
-  }
+  flushParagraph();
+  flushList();
+  return parts.join('');
+}
 
-  const visibleRecent = recent.slice().reverse().slice(0, 30);
-  if (visibleRecent.length === 0) {
-    recentActionsList.innerHTML = '<div class="empty-state">No recent actions</div>';
-  } else {
-    recentActionsList.innerHTML = visibleRecent.map((r: any) =>
-      `<div class="action-row status-${r.status}" data-action-id="${r.id}">${buildActionRowHtml(r)}</div>`
-    ).join('');
+function prettifyToolName(name: string): string {
+  return name
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+function truncateSingleLine(text: string, max = 120): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  return normalized.length > max ? `${normalized.slice(0, max - 3)}...` : normalized;
+}
+
+function extractToolName(text: string): string {
+  return text.split('→')[0]?.trim() || text.trim();
+}
+
+function summarizeToolCall(text: string): string {
+  const toolName = extractToolName(text);
+  return prettifyToolName(toolName);
+}
+
+function summarizeToolResult(text: string): string {
+  const [, detail = 'Completed'] = text.split('→');
+  return truncateSingleLine(detail || 'Completed');
+}
+
+function summarizeUnknownForUi(value: unknown, max = 140): string {
+  if (value == null) return 'Completed';
+  if (typeof value === 'string') return truncateSingleLine(value, max);
+  try {
+    return truncateSingleLine(JSON.stringify(value), max);
+  } catch {
+    return truncateSingleLine(String(value), max);
   }
 }
 
-function patchActionInSplit(record: any): void {
-  const idx = actionRecords.findIndex((r: any) => r.id === record.id);
-  if (idx >= 0) {
-    actionRecords[idx] = record;
-  } else {
-    actionRecords.push(record);
+function isRawToolTranscript(text: string): boolean {
+  const trimmed = text.trim();
+  return /^\+\s*tool\b/i.test(trimmed)
+    || /^tool\s+[a-z0-9_]+/i.test(trimmed)
+    || /^tool result:\s/i.test(trimmed)
+    || /^tool call:\s/i.test(trimmed);
+}
+
+// ─── Chat Message Helpers ──────────────────────────────────────────────────
+
+function isInternalPromptText(text: string): boolean {
+  return text.startsWith('Run a critique pass on the current draft answer before finalizing.')
+    || text.startsWith('Revise the draft answer using the critique and verification records now stored in task memory.');
+}
+
+function isInternalModelText(text: string): boolean {
+  return text.startsWith('## Critique Summary');
+}
+
+function shouldShowMemoryEntry(entry: TaskMemoryEntry): boolean {
+  if (entry.kind === 'system' || entry.kind === 'handoff' || entry.kind === 'browser_finding') return false;
+  if (entry.kind === 'user_prompt') return !isInternalPromptText(entry.text);
+  if (entry.kind === 'model_result') return !isInternalModelText(entry.text);
+  return true;
+}
+
+function appendUserMessage(text: string): void {
+  if (chatEmptyState.parentNode) chatEmptyState.remove();
+  const el = document.createElement('div');
+  el.className = 'chat-msg chat-msg-user';
+  el.textContent = text;
+  chatThread.appendChild(el);
+  scheduleChatScrollToBottom(true);
+}
+
+function clearChatThread(): void {
+  chatThread.innerHTML = '';
+  chatThread.appendChild(chatEmptyState);
+}
+
+function createLiveRunCard(taskId: string, provider: string): LiveRunCard {
+  if (chatEmptyState.parentNode) chatEmptyState.remove();
+  const root = document.createElement('div');
+  root.className = 'chat-msg chat-msg-model chat-msg-live';
+  root.dataset.taskId = taskId;
+  root.innerHTML =
+    `<div class="chat-msg-header">` +
+    `<span class="chat-msg-provider ${escapeHtml(provider)}">${escapeHtml(provider)}</span>` +
+    `<span class="chat-msg-meta">working...</span>` +
+    `</div>` +
+    `<div class="chat-activity"></div>` +
+    `<div class="chat-msg-text chat-msg-thinking shimmer">Working\u2026</div>`;
+  chatThread.appendChild(root);
+  scheduleChatScrollToBottom(true, 5);
+  const card: LiveRunCard = {
+    root,
+    meta: root.querySelector('.chat-msg-meta') as HTMLElement,
+    activity: root.querySelector('.chat-activity') as HTMLElement,
+    output: root.querySelector('.chat-msg-text') as HTMLElement,
+    seenThoughts: new Set(),
+    pendingToolBlock: null,
+    typingQueue: [],
+    typingTimer: null,
+    activeThoughtEl: null,
+    deferredToolEvents: [],
+  };
+  liveRunCards.set(taskId, card);
+  return card;
+}
+
+function appendMemoryEntry(entry: TaskMemoryEntry): void {
+  if (!shouldShowMemoryEntry(entry)) return;
+
+  if (entry.kind === 'user_prompt') {
+    appendUserMessage(entry.text);
+    return;
   }
 
-  const isActive = record.status === 'queued' || record.status === 'running';
+  if (chatEmptyState.parentNode) chatEmptyState.remove();
+  const el = document.createElement('div');
+  el.className = 'chat-msg chat-msg-model';
+  const provider = entry.providerId || 'system';
+  el.innerHTML =
+    `<div class="chat-msg-header">` +
+    `<span class="chat-msg-provider ${escapeHtml(provider)}">${escapeHtml(provider)}</span>` +
+    `<span class="chat-msg-meta">${escapeHtml(formatTime(entry.createdAt))}</span>` +
+    `</div>` +
+    `<div class="chat-msg-text chat-markdown">${renderMarkdown(entry.text)}</div>`;
+  chatThread.appendChild(el);
+  scheduleChatScrollToBottom(true);
+}
 
-  // Remove from both lists first (action may have moved from active to recent)
-  const existingActive = activeActionsList.querySelector(`[data-action-id="${record.id}"]`);
-  const existingRecent = recentActionsList.querySelector(`[data-action-id="${record.id}"]`);
-  if (existingActive) existingActive.remove();
-  if (existingRecent) existingRecent.remove();
+async function refreshTaskConversation(taskId: string | null): Promise<void> {
+  if (!taskId) {
+    renderedTaskMemoryKey = null;
+    clearChatThread();
+    return;
+  }
 
-  // Insert into the correct list
-  const targetList = isActive ? activeActionsList : recentActionsList;
+  const existingCard = liveRunCards.get(taskId);
+  if (existingCard?.root.isConnected) return;
 
-  // Clear empty state if present
-  const emptyState = targetList.querySelector('.empty-state');
-  if (emptyState) emptyState.remove();
+  const memory = await workspaceAPI.model.getTaskMemory(taskId);
+  const memoryKey = `${taskId}:${memory.lastUpdatedAt || 0}:${memory.entries.length}`;
+  if (memoryKey === renderedTaskMemoryKey) return;
 
+  renderedTaskMemoryKey = memoryKey;
+  clearChatThread();
+  for (const entry of memory.entries) {
+    appendMemoryEntry(entry);
+  }
+}
+
+// ─── Thought / Tool Activity Streaming ─────────────────────────────────────
+
+function appendThought(taskId: string, text: string): void {
+  const card = liveRunCards.get(taskId);
+  if (!card) return;
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  if (isRawToolTranscript(trimmed)) return;
+  if (/^(##\s*(Observation|Inference|Critique Summary)|Observation:|Inference:)/.test(trimmed)) return;
+  if (trimmed.length > 260 || trimmed.split('\n').length > 4) return;
+  if (card.seenThoughts.has(trimmed)) return;
+  card.seenThoughts.add(trimmed);
+  card.pendingToolBlock = null;
+  card.typingQueue.push(trimmed);
+  if (card.typingTimer !== null) return;
+
+  const typeNext = () => {
+    const next = card.typingQueue.shift();
+    if (!next) {
+      card.typingTimer = null;
+      card.activeThoughtEl = null;
+      while (card.deferredToolEvents.length > 0) {
+        const event = card.deferredToolEvents.shift()!;
+        appendToolActivity(taskId, event.kind, event.text);
+      }
+      return;
+    }
+
+    const el = document.createElement('div');
+    el.className = 'chat-thought';
+    card.activity.appendChild(el);
+    card.activeThoughtEl = el;
+    let idx = 0;
+    const step = () => {
+      idx += 2;
+      el.textContent = next.slice(0, idx);
+      scheduleChatScrollToBottom(true, 4);
+      if (idx < next.length) {
+        card.typingTimer = window.setTimeout(step, 10);
+      } else {
+        card.typingTimer = window.setTimeout(() => {
+          card.typingTimer = null;
+          card.activeThoughtEl = null;
+          while (card.deferredToolEvents.length > 0) {
+            const event = card.deferredToolEvents.shift()!;
+            appendToolActivity(taskId, event.kind, event.text);
+          }
+          typeNext();
+        }, 90);
+      }
+    };
+    step();
+  };
+
+  typeNext();
+}
+
+function appendToolActivity(taskId: string, kind: 'call' | 'result', text: string): void {
+  const card = liveRunCards.get(taskId);
+  if (!card) return;
+  if (card.typingTimer !== null || card.activeThoughtEl) {
+    card.deferredToolEvents.push({ kind, text });
+    return;
+  }
+  if (kind === 'call' || !card.pendingToolBlock) {
+    const toolName = extractToolName(text);
+    const details = document.createElement('details');
+    details.className = 'chat-tool-details';
+    details.dataset.toolName = toolName;
+    details.innerHTML =
+      `<summary><span class="chat-tool-label">Tool</span><span class="chat-tool-summary-code">${escapeHtml(summarizeToolCall(toolName))}</span></summary>` +
+      `<div class="chat-tool-list"></div>`;
+    card.activity.appendChild(details);
+    card.pendingToolBlock = details;
+  }
+
+  const target = card.pendingToolBlock.querySelector('.chat-tool-list') as HTMLElement;
   const row = document.createElement('div');
-  row.className = `action-row status-${record.status}`;
-  row.setAttribute('data-action-id', record.id);
-  row.innerHTML = buildActionRowHtml(record);
-  targetList.insertBefore(row, targetList.firstChild);
+  row.className = `chat-tool-row ${kind}`;
+  const detailText = kind === 'call' ? text : (text.includes('→') ? text.split('→').slice(1).join('→').trim() : text);
+  row.innerHTML = `<span class="chat-tool-kind">${kind === 'call' ? 'CALL' : 'RESULT'}</span><code>${escapeHtml(detailText)}</code>`;
+  target.appendChild(row);
 
-  // Trim recent to 30 visible
-  if (!isActive) {
-    while (recentActionsList.children.length > 30) {
-      recentActionsList.removeChild(recentActionsList.lastChild!);
+  if (kind === 'result') {
+    const summaryEl = card.pendingToolBlock.querySelector('.chat-tool-summary-code') as HTMLElement | null;
+    if (summaryEl) {
+      const toolName = card.pendingToolBlock.dataset.toolName || extractToolName(text);
+      summaryEl.textContent = `${prettifyToolName(toolName)} · ${summarizeToolResult(text)}`;
+    }
+    card.pendingToolBlock = null;
+  }
+  scheduleChatScrollToBottom(true, 5);
+}
+
+function appendCodexItemProgress(taskId: string, progressData: string, item?: CodexItem): void {
+  if (!item) return;
+  const started = /\bstarted$/.test(progressData);
+  const completed = /\bcompleted$/.test(progressData);
+
+  if (item.type === 'agent_message' && completed) {
+    for (const line of item.text.split('\n')) {
+      appendThought(taskId, line);
+    }
+    return;
+  }
+
+  if (item.type === 'mcp_tool_call') {
+    const toolLabel = item.tool || item.server || 'tool';
+    if (started) {
+      appendToolActivity(taskId, 'call', toolLabel);
+    } else if (completed) {
+      const detail = item.error?.message ? `Error: ${item.error.message}` : summarizeUnknownForUi(item.result);
+      appendToolActivity(taskId, 'result', `${toolLabel} → ${detail}`);
+    }
+    return;
+  }
+
+  if (item.type === 'command_execution') {
+    if (started) {
+      appendToolActivity(taskId, 'call', item.command);
+    } else if (completed) {
+      const detail = item.exit_code == null ? 'Completed' : (item.exit_code === 0 ? 'Succeeded' : `Exit ${item.exit_code}`);
+      appendToolActivity(taskId, 'result', `${item.command} → ${detail}`);
+    }
+    return;
+  }
+
+  if (item.type === 'file_change' && completed) {
+    const detail = item.changes.map((change) => `${change.kind} ${change.path}`).join(', ') || 'Updated files';
+    appendToolActivity(taskId, 'result', `file_change → ${detail}`);
+  }
+}
+
+function replaceWithResult(taskId: string, result: any, provider?: string): void {
+  const card = liveRunCards.get(taskId);
+  if (!card) return;
+  if (result.codexItems && result.codexItems.length > 0) {
+    for (const item of result.codexItems) {
+      if (item.type === 'command_execution' && item.status === 'completed') {
+        appendToolActivity(taskId, 'result', `$ ${item.command}`);
+      } else if (item.type === 'file_change' && item.status === 'completed') {
+        const changes = item.changes.map((c: any) => `${c.kind}: ${c.path}`).join(', ');
+        appendToolActivity(taskId, 'result', changes);
+      }
     }
   }
 
-  // Update counts
-  const activeCount = actionRecords.filter((r: any) => r.status === 'queued' || r.status === 'running').length;
-  const recentCount = actionRecords.filter((r: any) => r.status !== 'queued' && r.status !== 'running').length;
-  activeActionsCount.textContent = String(activeCount);
-  recentActionsCount.textContent = String(recentCount);
+  const usage = result.usage;
+  const meta = `${usage.durationMs}ms | ${usage.inputTokens}in / ${usage.outputTokens}out`;
 
-  // Auto-collapse/expand active panel based on content
-  if (activeCount === 0) {
-    activeActionsPanel.classList.add('collapsed');
+  if (result.success) {
+    card.meta.textContent = meta;
+    card.output.className = 'chat-msg-text chat-markdown';
+    card.output.innerHTML = renderMarkdown(result.output);
   } else {
-    activeActionsPanel.classList.remove('collapsed');
+    card.meta.textContent = 'failed';
+    card.output.className = 'chat-msg-error';
+    card.output.textContent = result.error || 'Unknown error';
+  }
+  trackTokenUsage(result, provider || result.providerId || 'codex');
+  scheduleChatScrollToBottom(true, 6);
+}
+
+function replaceWithError(taskId: string, error: string): void {
+  const card = liveRunCards.get(taskId);
+  if (!card) return;
+  card.meta.textContent = 'failed';
+  card.output.className = 'chat-msg-error';
+  card.output.textContent = error;
+  scheduleChatScrollToBottom(true, 6);
+}
+
+// ─── Chat Submission ───────────────────────────────────────────────────────
+
+function getActiveTaskIdFromState(): string | null {
+  const state = (window as any).__lastState;
+  return state?.activeTaskId || null;
+}
+
+async function submitChat(): Promise<void> {
+  const prompt = chatInput.value.trim();
+  if (!prompt) { chatInput.focus(); return; }
+
+  chatCounter++;
+  let taskId = getActiveTaskIdFromState();
+  const owner = selectedOwner === 'auto' ? undefined : selectedOwner;
+
+  if (!taskId) {
+    const title = prompt.length > 48 ? `${prompt.slice(0, 48)}...` : prompt;
+    const createdTask = await workspaceAPI.createTask(title);
+    taskId = createdTask.id;
   }
 
-  // Restore empty state if list is now empty
-  if (activeActionsList.children.length === 0) {
-    activeActionsList.innerHTML = '<div class="empty-state">No active actions</div>';
+  chatInput.value = '';
+  chatSubmitBtn.setAttribute('disabled', '');
+
+  appendUserMessage(prompt);
+
+  let resolvedOwner: string = owner || '';
+  if (!resolvedOwner) {
+    try {
+      resolvedOwner = await workspaceAPI.model.resolve(prompt);
+    } catch {
+      resolvedOwner = 'haiku';
+    }
   }
-  if (recentActionsList.children.length === 0) {
-    recentActionsList.innerHTML = '<div class="empty-state">No recent actions</div>';
+
+  createLiveRunCard(taskId, resolvedOwner);
+
+  try {
+    const result = await workspaceAPI.model.invoke(taskId, prompt, resolvedOwner);
+    replaceWithResult(taskId, result, resolvedOwner);
+  } catch (err: any) {
+    replaceWithError(taskId, err.message || String(err));
+  } finally {
+    chatSubmitBtn.removeAttribute('disabled');
+    chatInput.focus();
   }
 }
 
-// ─── Full State Render ──────────────────────────────────────────────────────
+chatSubmitBtn.addEventListener('click', submitChat);
+chatInput.addEventListener('keydown', (e: KeyboardEvent) => {
+  if (e.key === 'Enter') submitChat();
+});
+
+// ─── Full State Render ─────────────────────────────────────────────────────
 
 function renderState(state: any): void {
+  (window as any).__lastState = state;
   const active = state.tasks.find((t: any) => t.id === state.activeTaskId);
-  taskSummary.textContent = active ? `Active: ${active.title}` : 'No active task';
-  renderTasks(state.tasks, state.activeTaskId);
+  taskSummary.textContent = active ? active.title : 'No active task';
   renderLogs(state.logs);
-  renderBrowserSurfaceState(state);
-  renderTerminalSurfaceState(state);
 
   if (state.executionSplit) {
     const ratio = state.executionSplit.ratio;
-    splitLabel.textContent = `Split: ${Math.round(ratio * 100)}/${Math.round((1 - ratio) * 100)}`;
-    layoutControls.querySelectorAll('[data-preset]').forEach((btn) => {
+    splitLabel.textContent = `split ${Math.round(ratio * 100)}/${Math.round((1 - ratio) * 100)}`;
+    splitSelector.querySelectorAll('[data-preset]').forEach((btn) => {
       (btn as HTMLElement).classList.toggle('active', (btn as HTMLElement).dataset.preset === state.executionSplit.preset);
     });
   }
-  taskCount.textContent = `Tasks: ${state.tasks.length}`;
+
+  taskCount.textContent = `tasks: ${state.tasks.length}`;
+
+  // Update session/model labels from providers
+  const codex = state.providers?.codex;
+  if (codex?.sessionId) {
+    sessionLabel.textContent = codex.sessionId.slice(0, 12);
+  }
+  if (codex?.model) {
+    modelLabel.textContent = codex.model;
+  }
+
+  // Update metrics from provider state if available
+  if (codex?.metrics) {
+    renderCodexMetrics(codex.metrics);
+  }
+
+  const nextTaskId = state.activeTaskId || null;
+  if (nextTaskId !== currentRenderedTaskId) {
+    currentRenderedTaskId = nextTaskId;
+    renderedTaskMemoryKey = null;
+    void refreshTaskConversation(nextTaskId);
+  } else if (!nextTaskId || !liveRunCards.get(nextTaskId)?.root.isConnected) {
+    void refreshTaskConversation(nextTaskId);
+  }
 }
 
-// ─── Live Updates ───────────────────────────────────────────────────────────
+// ─── Live Updates ──────────────────────────────────────────────────────────
 
 workspaceAPI.onStateUpdate((state: any) => renderState(state));
 
-workspaceAPI.actions.onUpdate((record: any) => {
-  patchActionInSplit(record);
-});
-
-workspaceAPI.browser.onStateUpdate((bs: any) => {
-  renderBrowserSurfaceState({ browserRuntime: bs });
-});
-
-// Click-to-copy tab IDs in browser state panel
-browserStateTabs.addEventListener('click', (e: Event) => {
-  const target = e.target as HTMLElement;
-  const chip = target.closest('[data-copy-id]') as HTMLElement | null;
-  if (!chip) return;
-  const id = chip.getAttribute('data-copy-id')!;
-  navigator.clipboard.writeText(id).then(() => {
-    chip.classList.add('copied');
-    setTimeout(() => chip.classList.remove('copied'), 1200);
-  });
-});
-
-// ─── Sidebar ───────────────────────────────────────────────────────────────
-
-function sidebarOpen(): void {
-  logSidebar.classList.add('open');
-  sidebarToggleBtn.classList.add('active');
-}
-
-function sidebarClose(): void {
-  logSidebar.classList.remove('open');
-  sidebarToggleBtn.classList.remove('active');
-}
-
-function sidebarToggle(): void {
-  if (logSidebar.classList.contains('open') || logSidebar.classList.contains('pinned')) {
-    sidebarClose();
-    sidebarUnpin();
-  } else {
-    sidebarOpen();
+workspaceAPI.model.onProgress((progress: any) => {
+  if (!progress?.taskId || !liveRunCards.has(progress.taskId)) return;
+  if (progress.type === 'token') {
+    appendThought(progress.taskId, String(progress.data || ''));
+    return;
   }
-}
-
-function sidebarPin(): void {
-  logSidebar.classList.add('pinned', 'open');
-  sidebarPinBtn.classList.add('active');
-  sidebarToggleBtn.classList.add('active');
-  localStorage.setItem('v1-sidebar-pinned', '1');
-}
-
-function sidebarUnpin(): void {
-  logSidebar.classList.remove('pinned');
-  sidebarPinBtn.classList.remove('active');
-  localStorage.removeItem('v1-sidebar-pinned');
-}
-
-function sidebarTogglePin(): void {
-  if (logSidebar.classList.contains('pinned')) {
-    sidebarUnpin();
-  } else {
-    sidebarPin();
+  if (progress.type === 'item') {
+    appendCodexItemProgress(progress.taskId, String(progress.data || ''), progress.codexItem as CodexItem | undefined);
+    return;
   }
-}
-
-sidebarToggleBtn.addEventListener('click', sidebarToggle);
-sidebarPinBtn.addEventListener('click', sidebarTogglePin);
-sidebarCloseBtn.addEventListener('click', () => { sidebarClose(); sidebarUnpin(); });
-
-// Restore pinned state from localStorage
-if (localStorage.getItem('v1-sidebar-pinned') === '1') {
-  sidebarPin();
-}
-
-// ─── Collapsible Sections ──────────────────────────────────────────────────
-
-function togglePanel(panel: HTMLElement): void {
-  panel.classList.toggle('collapsed');
-}
-
-activeActionsHeader.addEventListener('click', () => togglePanel(activeActionsPanel));
-recentActionsHeader.addEventListener('click', () => togglePanel(recentActionsPanel));
-taskList.addEventListener('click', (e: Event) => {
-  const target = e.target as HTMLElement;
-  if (target === taskList) {
-    togglePanel(taskList);
+  if (progress.type === 'status') {
+    const text = String(progress.data || '');
+    if (text.startsWith('Calling ')) {
+      appendToolActivity(progress.taskId, 'call', text.replace(/^Calling\s+/, '').replace(/\.\.\.$/, ''));
+    } else if (text.startsWith('Tool result: ')) {
+      appendToolActivity(progress.taskId, 'result', text.slice('Tool result: '.length));
+    } else if (text && !/^Turn completed/.test(text)) {
+      appendThought(progress.taskId, text);
+    }
   }
 });
 
-// ─── Init ───────────────────────────────────────────────────────────────────
-
-populateKinds();
+// ─── Init ──────────────────────────────────────────────────────────────────
 
 workspaceAPI.getState().then((state: any) => {
   renderState(state);
   workspaceAPI.addLog('info', 'system', 'Command Center initialized');
-});
-
-// Load recent actions into split view
-workspaceAPI.actions.listRecent(50).then((records: any[]) => {
-  renderSplitActions(records);
 });

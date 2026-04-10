@@ -2,6 +2,7 @@ import { PhysicalWindowRole, SurfaceRole, LogSourceRole } from './windowRoles';
 import { TerminalSessionState, createDefaultTerminalState, TerminalCommandState, createDefaultTerminalCommandState } from './terminal';
 import { BrowserState, createDefaultBrowserState } from './browser';
 import { SurfaceActionRecord } from '../actions/surfaceActionTypes';
+import { ProviderId, ProviderRuntime, ModelOwner, createDefaultProviderRuntime } from './model';
 
 export type WindowBounds = { x: number; y: number; width: number; height: number };
 
@@ -19,6 +20,7 @@ export type TaskRecord = {
   id: string;
   title: string;
   status: TaskStatus;
+  owner: ModelOwner;
   createdAt: number;
   updatedAt: number;
 };
@@ -63,6 +65,7 @@ export type AppState = {
   terminalCommand: TerminalCommandState;
   browserRuntime: BrowserState;
   surfaceActions: SurfaceActionRecord[];
+  providers: Record<ProviderId, ProviderRuntime>;
 };
 
 export function createDefaultWindowState(role: PhysicalWindowRole): WindowState {
@@ -91,6 +94,10 @@ export function createDefaultAppState(): AppState {
     terminalCommand: createDefaultTerminalCommandState(),
     browserRuntime: createDefaultBrowserState(),
     surfaceActions: [],
+    providers: {
+      codex: createDefaultProviderRuntime('codex'),
+      haiku: createDefaultProviderRuntime('haiku'),
+    },
   };
 }
 

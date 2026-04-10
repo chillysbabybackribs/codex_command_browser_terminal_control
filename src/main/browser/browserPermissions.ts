@@ -15,6 +15,7 @@ const AUTO_GRANT: Set<string> = new Set([
   'clipboard-sanitized-write',
   'fullscreen',
   'pointerLock',
+  'window-management',
 ]);
 
 // Permissions explicitly denied — require future UI for user consent

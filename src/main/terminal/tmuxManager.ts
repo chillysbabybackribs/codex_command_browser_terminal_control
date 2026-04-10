@@ -61,6 +61,12 @@ export function createSession(cols: number, rows: number, shell: string, cwd: st
     '-y', String(Math.max(1, rows)),
     shell,
   ], { cwd, timeout: 5000 });
+
+  try {
+    execFileSync(tmuxPath, ['set-option', '-t', TMUX_SESSION_NAME, 'history-limit', '50000'], { timeout: 3000 });
+  } catch {
+    // non-fatal
+  }
 }
 
 export function killSession(): void {
@@ -85,6 +91,7 @@ export function captureScrollback(): string {
     return '';
   }
 }
+
 
 export function resizeSession(cols: number, rows: number): void {
   if (!tmuxPath) return;

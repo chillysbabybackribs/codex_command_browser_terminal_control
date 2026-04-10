@@ -10,9 +10,20 @@ import {
   BrowserState, BrowserNavigationState, BrowserSurfaceStatus,
   BrowserHistoryEntry, BrowserDownloadState, BrowserPermissionRequest,
   BrowserErrorInfo, BrowserProfile, TabInfo, BookmarkEntry, ExtensionInfo,
-  FindInPageState, BrowserSettings,
+  FindInPageState, BrowserSettings, BrowserAuthDiagnostics,
   createDefaultBrowserState, createDefaultSettings,
 } from '../../shared/types/browser';
+import {
+  BrowserActionableElement,
+  BrowserConsoleEvent,
+  BrowserSurfaceEvalFixture,
+  BrowserFinding,
+  BrowserFormModel,
+  BrowserNetworkEvent,
+  BrowserSiteStrategy,
+  BrowserSnapshot,
+  BrowserTaskMemory,
+} from '../../shared/types/browserIntelligence';
 import { appStateStore } from '../state/appStateStore';
 import { ActionType } from '../state/actions';
 import { eventBus } from '../events/eventBus';
@@ -25,6 +36,15 @@ import {
 import { resolvePermission, classifyPermission } from './browserPermissions';
 import { createDownloadEntry, resolveDownloadPath } from './browserDownloads';
 import { importChromeCookies, isChromeAvailable, promptCookieImport } from './chromeCookieImporter';
+import { BrowserInstrumentation } from './BrowserInstrumentation';
+import { BrowserPerception } from './BrowserPerception';
+import { BrowserSiteStrategyStore } from './BrowserSiteStrategies';
+import { appendSurfaceFixture } from './BrowserIntelligenceStore';
+import { taskMemoryStore } from '../models/taskMemoryStore';
+import { BrowserPageInteraction } from './BrowserPageInteraction';
+import { BrowserPageAnalysis } from './BrowserPageAnalysis';
+import type { SearchResultCandidate, PageEvidence } from './BrowserPageAnalysis';
+import { BrowserOverlayManager } from './BrowserOverlayManager';
 
 const PROFILE_ID = 'workspace-browser';
 const PARTITION = 'persist:workspace-browser';
@@ -34,12 +54,31 @@ const HISTORY_PERSIST_DEBOUNCE = 2000;
 const ZOOM_STEP = 0.1;
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 5.0;
+const GOOGLE_AUTH_MISMATCH_PATH = '/CookieMismatch';
+const GOOGLE_AUTH_START_URL = 'https://accounts.google.com/';
+const GOOGLE_COOKIE_DOMAIN_SUFFIXES = [
+  'google.com',
+  'youtube.com',
+  'googleusercontent.com',
+];
 
 type TabEntry = {
   id: string;
   view: WebContentsView;
   info: TabInfo;
 };
+
+function sanitizeBrowserUserAgent(userAgent: string): string {
+  return userAgent
+    .replace(/\s*Electron\/[\d.]+/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function isGoogleCookieDomain(domain: string): boolean {
+  const normalized = domain.replace(/^\./, '').toLowerCase();
+  return GOOGLE_COOKIE_DOMAIN_SUFFIXES.some(suffix => normalized === suffix || normalized.endsWith(`.${suffix}`));
+}
 
 export class BrowserService {
   private tabs: Map<string, TabEntry> = new Map();
@@ -60,6 +99,27 @@ export class BrowserService {
   private historyPersistTimer: ReturnType<typeof setTimeout> | null = null;
   private currentBounds = { x: 0, y: 0, width: 0, height: 0 };
   private sessionInstance: Electron.Session | null = null;
+  private lastGoogleCookieMismatchAt: number | null = null;
+  private instrumentation = new BrowserInstrumentation();
+  private perception = new BrowserPerception((expression, tabId) => this.executeInPage(expression, tabId));
+  private siteStrategies = new BrowserSiteStrategyStore();
+  private pageInteraction = new BrowserPageInteraction((tabId) => this.resolveEntry(tabId));
+  private pageAnalysis = new BrowserPageAnalysis({
+    resolveEntry: (tabId) => this.resolveEntry(tabId),
+    getTabs: () => this.getTabs(),
+    createTab: (url) => this.createTab(url),
+    activateTab: (tabId) => this.activateTab(tabId),
+    executeInPage: (expression, tabId) => this.executeInPage(expression, tabId),
+    captureTabSnapshot: (tabId) => this.captureTabSnapshot(tabId),
+    activeTabId: () => this.activeTabId,
+  });
+  private overlayManager = new BrowserOverlayManager({
+    resolveEntry: (tabId) => this.resolveEntry(tabId),
+    captureTabSnapshot: (tabId) => this.captureTabSnapshot(tabId),
+    executeInPage: (expression, tabId) => this.executeInPage(expression, tabId),
+    clickElement: (selector, tabId) => this.clickElement(selector, tabId),
+    rankActionableElements: (snapshot, options) => this.pageAnalysis.rankActionableElements(snapshot, options),
+  });
 
   constructor() {
     this.profile = { id: PROFILE_ID, partition: PARTITION, persistent: true, userAgent: null };
@@ -79,6 +139,7 @@ export class BrowserService {
     const ses = session.fromPartition(PARTITION);
     this.sessionInstance = ses;
     this.initSession(ses);
+    this.instrumentation.attachSession(ses);
 
     this.createdAt = Date.now();
 
@@ -137,13 +198,11 @@ export class BrowserService {
   }
 
   private initSession(ses: Electron.Session): void {
-    // Strip "Electron/X.X.X" from UA only for Google OAuth requests
-    // This is the minimum change to make "Sign in with Google" work
-    // All other requests keep the default UA untouched
-    ses.webRequest.onBeforeSendHeaders({ urls: ['*://accounts.google.com/*'] }, (details, callback) => {
+    // Present the embedded browser as a standard Chromium browser for Google flows.
+    ses.webRequest.onBeforeSendHeaders({ urls: ['*://*.google.com/*', '*://*.youtube.com/*'] }, (details, callback) => {
       const ua = details.requestHeaders['User-Agent'];
       if (ua && ua.includes('Electron')) {
-        details.requestHeaders['User-Agent'] = ua.replace(/\s*Electron\/[\d.]+/g, '');
+        details.requestHeaders['User-Agent'] = sanitizeBrowserUserAgent(ua);
       }
       callback({ requestHeaders: details.requestHeaders });
     });
@@ -225,6 +284,12 @@ export class BrowserService {
       },
     });
 
+    const currentUserAgent = view.webContents.getUserAgent();
+    const effectiveUserAgent = sanitizeBrowserUserAgent(currentUserAgent);
+    if (effectiveUserAgent && effectiveUserAgent !== currentUserAgent) {
+      view.webContents.setUserAgent(effectiveUserAgent);
+    }
+
     // Set zoom from settings
     view.webContents.setZoomFactor(this.settings.defaultZoom);
 
@@ -245,6 +310,7 @@ export class BrowserService {
     this.tabs.set(id, entry);
 
     this.wireTabEvents(entry);
+    this.instrumentation.attachTab(id, view.webContents);
 
     // Don't add to contentView yet — only the active tab is visible
     if (url && url !== 'about:blank') {
@@ -281,6 +347,7 @@ export class BrowserService {
     if (this.hostWindow && !this.hostWindow.isDestroyed()) {
       try { this.hostWindow.contentView.removeChildView(entry.view); } catch {}
     }
+    this.instrumentation.detachTab(tabId, entry.view.webContents.id);
     try { if (!entry.view.webContents.isDestroyed()) entry.view.webContents.close(); } catch {}
     this.tabs.delete(tabId);
 
@@ -355,6 +422,7 @@ export class BrowserService {
       nav.lastNavigationAt = Date.now();
       this.addHistoryEntry(url, nav.title, nav.favicon);
       this.syncTabAndMaybeNavigation(entry);
+      void this.handleGoogleAuthNavigation(entry, url);
     });
 
     wc.on('did-navigate-in-page', (_e: ElectronEvent, url: string) => {
@@ -398,6 +466,11 @@ export class BrowserService {
 
     wc.on('context-menu', (_e: ElectronEvent, params: Electron.ContextMenuParams) => {
       const menu = new Menu();
+      const currentUrl = wc.getURL();
+      const canViewSource = !!currentUrl
+        && currentUrl !== 'about:blank'
+        && !currentUrl.startsWith('devtools://')
+        && !currentUrl.startsWith('view-source:');
 
       // ── Text editing actions ──
       if (params.isEditable) {
@@ -450,6 +523,15 @@ export class BrowserService {
       menu.append(new MenuItem({ label: 'Back', enabled: wc.navigationHistory.canGoBack(), click: () => wc.navigationHistory.goBack() }));
       menu.append(new MenuItem({ label: 'Forward', enabled: wc.navigationHistory.canGoForward(), click: () => wc.navigationHistory.goForward() }));
       menu.append(new MenuItem({ label: 'Reload', click: () => wc.reload() }));
+      menu.append(new MenuItem({
+        label: 'View Page Source',
+        enabled: canViewSource,
+        click: () => { if (canViewSource) void this.openPageSource(currentUrl); },
+      }));
+      menu.append(new MenuItem({
+        label: 'Inspect Element',
+        click: () => wc.inspectElement(params.x, params.y),
+      }));
 
       menu.popup();
     });
@@ -466,6 +548,55 @@ export class BrowserService {
     if (entry.id === this.activeTabId) {
       this.syncNavigation();
     }
+  }
+
+  private async handleGoogleAuthNavigation(entry: TabEntry, rawUrl: string): Promise<void> {
+    if (!this.sessionInstance) return;
+
+    let parsed: URL;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      return;
+    }
+
+    if (parsed.hostname !== 'accounts.google.com' || parsed.pathname !== GOOGLE_AUTH_MISMATCH_PATH) {
+      return;
+    }
+
+    this.lastGoogleCookieMismatchAt = Date.now();
+    const cleared = await this.clearGoogleAuthCookies();
+    this.emitLog(
+      'warn',
+      `Detected Google CookieMismatch; cleared ${cleared} Google-family cookies and restarted auth flow`,
+    );
+
+    if (!entry.view.webContents.isDestroyed()) {
+      entry.view.webContents.loadURL(GOOGLE_AUTH_START_URL);
+    }
+  }
+
+  private async clearGoogleAuthCookies(): Promise<number> {
+    if (!this.sessionInstance) return 0;
+
+    const cookies = await this.sessionInstance.cookies.get({});
+    let cleared = 0;
+
+    for (const cookie of cookies) {
+      if (!cookie.domain || !cookie.name || !isGoogleCookieDomain(cookie.domain)) {
+        continue;
+      }
+
+      const url = `http${cookie.secure ? 's' : ''}://${cookie.domain.replace(/^\./, '')}${cookie.path}`;
+      try {
+        await this.sessionInstance.cookies.remove(url, cookie.name);
+        cleared++;
+      } catch {
+        // Ignore individual removal failures and continue clearing the jar.
+      }
+    }
+
+    return cleared;
   }
 
   // ─── Navigation ──────────────────────────────────────────────────────────
@@ -607,6 +738,113 @@ export class BrowserService {
     }
   }
 
+  private async openPageSource(url: string): Promise<void> {
+    if (!this.sessionInstance) return;
+
+    const tab = this.createTabInternal('about:blank', true);
+    this.activateTabInternal(tab.id);
+    this.syncState();
+
+    try {
+      const response = await this.sessionInstance.fetch(url);
+      const source = await response.text();
+      const contentType = response.headers.get('content-type') || 'unknown';
+      await tab.view.webContents.loadURL(this.renderSourceDocument({
+        url,
+        source,
+        title: `Source: ${url}`,
+        meta: `HTTP ${response.status} ${response.statusText || ''}`.trim(),
+        contentType,
+      }));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      await tab.view.webContents.loadURL(this.renderSourceDocument({
+        url,
+        source: `Unable to load page source.\n\n${message}`,
+        title: `Source Error: ${url}`,
+        meta: 'Fetch failed',
+        contentType: 'text/plain',
+      }));
+      this.emitLog('warn', `View page source failed for ${url}: ${message}`);
+    }
+  }
+
+  private renderSourceDocument(input: {
+    url: string;
+    source: string;
+    title: string;
+    meta: string;
+    contentType: string;
+  }): string {
+    const escapedTitle = this.escapeHtml(input.title);
+    const escapedUrl = this.escapeHtml(input.url);
+    const escapedMeta = this.escapeHtml(input.meta);
+    const escapedContentType = this.escapeHtml(input.contentType);
+    const escapedSource = this.escapeHtml(input.source);
+
+    return `data:text/html;charset=utf-8,${encodeURIComponent(`<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${escapedTitle}</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      body {
+        margin: 0;
+        background: #111827;
+        color: #e5e7eb;
+      }
+      header {
+        padding: 12px 16px;
+        border-bottom: 1px solid #374151;
+        background: #0f172a;
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      p {
+        margin: 2px 0;
+        font-size: 12px;
+        color: #9ca3af;
+        word-break: break-all;
+      }
+      pre {
+        margin: 0;
+        padding: 16px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>${escapedTitle}</h1>
+      <p>${escapedUrl}</p>
+      <p>${escapedMeta}</p>
+      <p>Content-Type: ${escapedContentType}</p>
+    </header>
+    <pre>${escapedSource}</pre>
+  </body>
+</html>`)}`;
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   // ─── Bookmarks ──────────────────────────────────────────────────────────
 
   addBookmark(url: string, title: string): BookmarkEntry {
@@ -698,6 +936,30 @@ export class BrowserService {
     saveSettings(this.settings);
     this.emitLog('info', 'Browser settings updated');
     this.syncState();
+  }
+
+  async getAuthDiagnostics(): Promise<BrowserAuthDiagnostics> {
+    const cookies = this.sessionInstance ? await this.sessionInstance.cookies.get({}) : [];
+    const activeEntry = this.getActiveEntry();
+    const activeTabUserAgent = activeEntry && !activeEntry.view.webContents.isDestroyed()
+      ? activeEntry.view.webContents.getUserAgent()
+      : '';
+
+    return {
+      totalCookies: cookies.length,
+      googleCookieCount: cookies.filter(cookie => cookie.domain && isGoogleCookieDomain(cookie.domain)).length,
+      importChromeCookies: this.settings.importChromeCookies,
+      googleAuthCompatibilityActive: true,
+      lastGoogleCookieMismatchAt: this.lastGoogleCookieMismatchAt,
+      activeTabUserAgent,
+      activeTabHasElectronUA: /Electron\/[\d.]+/i.test(activeTabUserAgent),
+    };
+  }
+
+  async clearGoogleAuthState(): Promise<{ cleared: number }> {
+    const cleared = await this.clearGoogleAuthCookies();
+    this.emitLog('info', `Cleared ${cleared} Google-family cookies from the app session`);
+    return { cleared };
   }
 
   // ─── Extensions ──────────────────────────────────────────────────────────
@@ -841,31 +1103,14 @@ export class BrowserService {
   isCreated(): boolean { return this.tabs.size > 0; }
 
   async getPageText(maxLength: number = 8000): Promise<string> {
-    const entry = this.getActiveEntry();
-    if (!entry) return '';
-    try {
-      const text: string = await entry.view.webContents.executeJavaScript(
-        'document.body ? document.body.innerText : ""',
-      );
-      return text.slice(0, maxLength);
-    } catch {
-      return '(unable to extract page text)';
-    }
+    return this.pageInteraction.getPageText(maxLength);
   }
 
   async executeInPage(
     expression: string,
     tabId?: string,
   ): Promise<{ result: unknown; error: string | null }> {
-    const entry = tabId ? this.tabs.get(tabId) : this.getActiveEntry();
-    if (!entry) return { result: null, error: 'No active tab' };
-    try {
-      const result = await entry.view.webContents.executeJavaScript(expression);
-      return { result, error: null };
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      return { result: null, error: message };
-    }
+    return this.pageInteraction.executeInPage(expression, tabId);
   }
 
   async querySelectorAll(
@@ -873,39 +1118,14 @@ export class BrowserService {
     tabId?: string,
     limit: number = 20,
   ): Promise<Array<{ tag: string; text: string; href: string | null; id: string; classes: string[] }>> {
-    const safeSelector = JSON.stringify(selector);
-    const { result, error } = await this.executeInPage(`
-      (() => {
-        const els = Array.from(document.querySelectorAll(${safeSelector})).slice(0, ${Math.floor(limit)});
-        return els.map(el => ({
-          tag: el.tagName.toLowerCase(),
-          text: (el.innerText || el.textContent || '').slice(0, 200),
-          href: el.getAttribute('href'),
-          id: el.id || '',
-          classes: Array.from(el.classList),
-        }));
-      })()
-    `, tabId);
-    if (error || !Array.isArray(result)) return [];
-    return result;
+    return this.pageInteraction.querySelectorAll(selector, tabId, limit);
   }
 
   async clickElement(
     selector: string,
     tabId?: string,
   ): Promise<{ clicked: boolean; error: string | null }> {
-    const safeSelector = JSON.stringify(selector);
-    const { result, error } = await this.executeInPage(`
-      (() => {
-        const el = document.querySelector(${safeSelector});
-        if (!el) return { clicked: false, reason: 'Element not found' };
-        el.click();
-        return { clicked: true };
-      })()
-    `, tabId);
-    if (error) return { clicked: false, error };
-    const r = result as { clicked?: boolean; reason?: string } | null;
-    return { clicked: r?.clicked ?? false, error: r?.reason ?? null };
+    return this.pageInteraction.clickElement(selector, tabId);
   }
 
   async typeInElement(
@@ -913,39 +1133,249 @@ export class BrowserService {
     text: string,
     tabId?: string,
   ): Promise<{ typed: boolean; error: string | null }> {
-    const safeSelector = JSON.stringify(selector);
-    const safeText = JSON.stringify(text);
-    const { result, error } = await this.executeInPage(`
-      (() => {
-        const el = document.querySelector(${safeSelector});
-        if (!el) return { typed: false, reason: 'Element not found' };
-        el.focus();
-        el.value = ${safeText};
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-        return { typed: true };
-      })()
-    `, tabId);
-    if (error) return { typed: false, error };
-    const r = result as { typed?: boolean; reason?: string } | null;
-    return { typed: r?.typed ?? false, error: r?.reason ?? null };
+    return this.pageInteraction.typeInElement(selector, text, tabId);
   }
 
   async getPageMetadata(tabId?: string): Promise<Record<string, unknown>> {
-    const { result, error } = await this.executeInPage(`
-      (() => ({
-        title: document.title,
-        url: location.href,
-        description: document.querySelector('meta[name="description"]')?.content || '',
-        h1: Array.from(document.querySelectorAll('h1')).map(el => el.innerText).slice(0, 5),
-        links: document.querySelectorAll('a[href]').length,
-        inputs: document.querySelectorAll('input, textarea, select').length,
-        forms: document.querySelectorAll('form').length,
-        images: document.querySelectorAll('img').length,
-      }))()
-    `, tabId);
-    if (error) return { error };
-    return (result as Record<string, unknown>) || {};
+    return this.pageInteraction.getPageMetadata(tabId);
+  }
+
+  async extractSearchResults(tabId?: string, limit: number = 10): Promise<SearchResultCandidate[]> {
+    return this.pageAnalysis.extractSearchResults(tabId, limit);
+  }
+
+  async openSearchResultsTabs(input: {
+    tabId?: string;
+    indices?: number[];
+    limit?: number;
+    activateFirst?: boolean;
+  }): Promise<{ success: boolean; openedTabIds: string[]; urls: string[]; sourceResults: SearchResultCandidate[]; error: string | null }> {
+    return this.pageAnalysis.openSearchResultsTabs(input);
+  }
+
+  async summarizeTabWorkingSet(tabIds?: string[]): Promise<Array<Record<string, unknown>>> {
+    return this.pageAnalysis.summarizeTabWorkingSet(tabIds);
+  }
+
+  async extractPageEvidence(tabId?: string): Promise<PageEvidence | null> {
+    return this.pageAnalysis.extractPageEvidence(tabId);
+  }
+
+  async compareTabs(tabIds?: string[]): Promise<Record<string, unknown>> {
+    return this.pageAnalysis.compareTabs(tabIds);
+  }
+
+  async synthesizeResearchBrief(input?: { tabIds?: string[]; question?: string }): Promise<Record<string, unknown>> {
+    return this.pageAnalysis.synthesizeResearchBrief(input);
+  }
+
+  async captureTabSnapshot(tabId?: string): Promise<BrowserSnapshot> {
+    const entry = tabId ? this.tabs.get(tabId) : this.getActiveEntry();
+    if (!entry) {
+      return {
+        id: generateId('snap'),
+        tabId: tabId || '',
+        capturedAt: Date.now(),
+        url: '',
+        title: '',
+        mainHeading: '',
+        visibleTextExcerpt: '',
+        actionableElements: [],
+        forms: [],
+        viewport: {
+          url: '',
+          title: '',
+          mainHeading: '',
+          visibleTextExcerpt: '',
+          modalPresent: false,
+          foregroundUiType: 'none',
+          foregroundUiLabel: '',
+          foregroundUiSelector: '',
+          foregroundUiConfidence: 0,
+          activeSurfaceType: 'unknown',
+          activeSurfaceLabel: '',
+          activeSurfaceSelector: '',
+          activeSurfaceConfidence: 0,
+          isPrimarySurface: false,
+          actionableCount: 0,
+        },
+      };
+    }
+    return this.perception.captureTabSnapshot(entry.id, this.getSiteStrategyForUrl(entry.info.navigation.url));
+  }
+
+  async getActionableElements(tabId?: string): Promise<BrowserActionableElement[]> {
+    const entry = tabId ? this.tabs.get(tabId) : this.getActiveEntry();
+    if (!entry) return [];
+    return this.perception.getActionableElements(entry.id, this.getSiteStrategyForUrl(entry.info.navigation.url));
+  }
+
+  async getFormModel(tabId?: string): Promise<BrowserFormModel[]> {
+    const entry = tabId ? this.tabs.get(tabId) : this.getActiveEntry();
+    if (!entry) return [];
+    return this.perception.getFormModel(entry.id, this.getSiteStrategyForUrl(entry.info.navigation.url));
+  }
+
+  private getSiteStrategyForUrl(rawUrl: string): BrowserSiteStrategy | null {
+    try {
+      const origin = new URL(rawUrl).origin;
+      return this.siteStrategies.get(origin);
+    } catch {
+      return null;
+    }
+  }
+
+  getSiteStrategy(origin: string): BrowserSiteStrategy | null {
+    return this.siteStrategies.get(origin);
+  }
+
+  saveSiteStrategy(input: Partial<BrowserSiteStrategy> & { origin: string }): BrowserSiteStrategy {
+    return this.siteStrategies.upsert(input);
+  }
+
+  async exportSurfaceEvalFixture(input: { name: string; tabId?: string }): Promise<BrowserSurfaceEvalFixture> {
+    const entry = input.tabId ? this.tabs.get(input.tabId) : this.getActiveEntry();
+    if (!entry) {
+      throw new Error('No active tab');
+    }
+    const fixture = await this.perception.exportSurfaceEvalFixture(
+      entry.id,
+      input.name,
+      this.getSiteStrategyForUrl(entry.info.navigation.url),
+    );
+    appendSurfaceFixture(fixture);
+    return fixture;
+  }
+
+  private resolveEntry(tabId?: string): TabEntry | undefined {
+    return tabId ? this.tabs.get(tabId) : this.getActiveEntry();
+  }
+
+  private rankActionableElements(
+    snapshot: BrowserSnapshot,
+    options?: { preferDismiss?: boolean },
+  ): Array<BrowserActionableElement & { rankScore: number; rankReason: string }> {
+    return this.pageAnalysis.rankActionableElements(snapshot, options);
+  }
+
+  async clickRankedAction(input: {
+    tabId?: string;
+    index?: number;
+    actionId?: string;
+    preferDismiss?: boolean;
+  }): Promise<{
+    success: boolean;
+    clickedAction: (BrowserActionableElement & { rankScore?: number; rankReason?: string }) | null;
+    error: string | null;
+  }> {
+    return this.overlayManager.clickRankedAction(input);
+  }
+
+  async waitForOverlayState(
+    state: 'open' | 'closed',
+    timeoutMs: number = 3000,
+    tabId?: string,
+  ): Promise<{
+    success: boolean;
+    state: 'open' | 'closed';
+    observed: boolean;
+    foregroundUiType: BrowserSnapshot['viewport']['foregroundUiType'];
+    foregroundUiLabel: string;
+    error: string | null;
+  }> {
+    return this.overlayManager.waitForOverlayState(state, timeoutMs, tabId);
+  }
+
+  async dismissForegroundUI(tabId?: string): Promise<{
+    success: boolean;
+    method: string | null;
+    target: string | null;
+    targetSelector: string | null;
+    beforeModalPresent: boolean;
+    afterModalPresent: boolean;
+    beforeForegroundUiType: BrowserSnapshot['viewport']['foregroundUiType'];
+    beforeForegroundUiLabel: string;
+    afterForegroundUiType: BrowserSnapshot['viewport']['foregroundUiType'];
+    afterForegroundUiLabel: string;
+    error: string | null;
+  }> {
+    return this.overlayManager.dismissForegroundUI(tabId);
+  }
+
+  async returnToPrimarySurface(tabId?: string): Promise<{
+    success: boolean;
+    restored: boolean;
+    steps: string[];
+    error: string | null;
+  }> {
+    return this.overlayManager.returnToPrimarySurface(tabId);
+  }
+
+  getConsoleEvents(tabId?: string, since?: number): BrowserConsoleEvent[] {
+    return this.instrumentation.getConsoleEvents(tabId, since);
+  }
+
+  getNetworkEvents(tabId?: string, since?: number): BrowserNetworkEvent[] {
+    return this.instrumentation.getNetworkEvents(tabId, since);
+  }
+
+  async recordTabFinding(input: {
+    taskId: string;
+    tabId?: string;
+    title: string;
+    summary: string;
+    severity?: BrowserFinding['severity'];
+    evidence?: string[];
+    snapshotId?: string | null;
+  }): Promise<BrowserFinding> {
+    const entry = input.tabId ? this.tabs.get(input.tabId) : this.getActiveEntry();
+    const tabId = entry?.id || input.tabId || '';
+    const snapshotId = input.snapshotId === undefined
+      ? (await this.captureTabSnapshot(tabId || undefined)).id
+      : input.snapshotId;
+    const finding: BrowserFinding = {
+      id: generateId('finding'),
+      taskId: input.taskId,
+      tabId,
+      snapshotId,
+      title: input.title,
+      summary: input.summary,
+      severity: input.severity || 'info',
+      evidence: input.evidence || [],
+      createdAt: Date.now(),
+    };
+    taskMemoryStore.recordBrowserFinding(finding);
+    return finding;
+  }
+
+  getTaskBrowserMemory(taskId: string): BrowserTaskMemory {
+    const record = taskMemoryStore.get(taskId);
+    const findings: BrowserFinding[] = [];
+    const tabsTouched: string[] = [];
+    const snapshotIds: string[] = [];
+    let lastUpdatedAt: number | null = null;
+
+    for (const entry of record.entries) {
+      if (entry.kind !== 'browser_finding') continue;
+      const meta = entry.metadata as Record<string, unknown> | undefined;
+      const finding: BrowserFinding = {
+        id: entry.id,
+        taskId,
+        tabId: typeof meta?.tabId === 'string' ? meta.tabId : '',
+        snapshotId: typeof meta?.snapshotId === 'string' ? meta.snapshotId : null,
+        title: entry.text.split(': ')[0] || '',
+        summary: entry.text.split(': ').slice(1).join(': ') || entry.text,
+        severity: (typeof meta?.severity === 'string' ? meta.severity : 'info') as BrowserFinding['severity'],
+        evidence: Array.isArray(meta?.evidence) ? meta.evidence as string[] : [],
+        createdAt: entry.createdAt,
+      };
+      findings.push(finding);
+      if (finding.tabId && !tabsTouched.includes(finding.tabId)) tabsTouched.push(finding.tabId);
+      if (finding.snapshotId && !snapshotIds.includes(finding.snapshotId)) snapshotIds.push(finding.snapshotId);
+      if (lastUpdatedAt === null || finding.createdAt > lastUpdatedAt) lastUpdatedAt = finding.createdAt;
+    }
+
+    return { taskId, lastUpdatedAt, findings, tabsTouched, snapshotIds };
   }
 
   // ─── Cleanup ──────────────────────────────────────────────────────────────

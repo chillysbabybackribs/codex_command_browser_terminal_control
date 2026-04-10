@@ -94,6 +94,15 @@ export function appReducer(state: AppState, action: Action): AppState {
         ),
       };
 
+    case ActionType.SET_PROVIDER_RUNTIME:
+      return {
+        ...state,
+        providers: {
+          ...state.providers,
+          [action.providerId]: action.runtime,
+        },
+      };
+
     case ActionType.REPLACE_STATE:
       return action.state;
 

@@ -6,5 +6,5 @@ export type PhysicalWindowRole = typeof PHYSICAL_WINDOW_ROLES[number];
 export const SURFACE_ROLES = ['browser', 'terminal'] as const;
 export type SurfaceRole = typeof SURFACE_ROLES[number];
 
-// Log sources can be a surface role or 'system'
-export type LogSourceRole = SurfaceRole | 'system';
+// Log sources can be a surface role, 'system', or a model provider
+export type LogSourceRole = SurfaceRole | 'system' | 'codex' | 'haiku';

@@ -18,6 +18,10 @@ const api = {
     return ipcRenderer.invoke(IPC_CHANNELS.UPDATE_TASK_STATUS, taskId, status);
   },
 
+  setActiveTask(taskId: string | null) {
+    return ipcRenderer.invoke(IPC_CHANNELS.SET_ACTIVE_TASK, taskId);
+  },
+
   addLog(level: string, source: string, message: string, taskId?: string) {
     return ipcRenderer.invoke(IPC_CHANNELS.ADD_LOG, level, source, message, taskId);
   },
@@ -37,6 +41,9 @@ const api = {
     submit(input: any) {
       return ipcRenderer.invoke(IPC_CHANNELS.SUBMIT_SURFACE_ACTION, input);
     },
+    cancelQueued(actionId: string) {
+      return ipcRenderer.invoke(IPC_CHANNELS.CANCEL_QUEUED_ACTION, actionId);
+    },
     listRecent(limit?: number) {
       return ipcRenderer.invoke(IPC_CHANNELS.GET_RECENT_ACTIONS, limit);
     },
@@ -45,6 +52,9 @@ const api = {
     },
     listByTask(taskId: string) {
       return ipcRenderer.invoke(IPC_CHANNELS.GET_ACTIONS_BY_TASK, taskId);
+    },
+    getQueueDiagnostics() {
+      return ipcRenderer.invoke(IPC_CHANNELS.GET_QUEUE_DIAGNOSTICS);
     },
     onUpdate(callback: (record: any) => void) {
       ipcRenderer.on(IPC_CHANNELS.SURFACE_ACTION_UPDATE, (_event: any, record: any) => {
@@ -84,6 +94,16 @@ const api = {
       return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_REPORT_BOUNDS, bounds);
     },
     getTabs() { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_GET_TABS); },
+    captureTabSnapshot(tabId?: string) { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_CAPTURE_TAB_SNAPSHOT, tabId); },
+    getActionableElements(tabId?: string) { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_GET_ACTIONABLE_ELEMENTS, tabId); },
+    getFormModel(tabId?: string) { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_GET_FORM_MODEL, tabId); },
+    getConsoleEvents(tabId?: string, since?: number) { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_GET_CONSOLE_EVENTS, tabId, since); },
+    getNetworkEvents(tabId?: string, since?: number) { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_GET_NETWORK_EVENTS, tabId, since); },
+    recordFinding(input: any) { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_RECORD_FINDING, input); },
+    getTaskMemory(taskId: string) { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_GET_TASK_MEMORY, taskId); },
+    getSiteStrategy(origin: string) { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_GET_SITE_STRATEGY, origin); },
+    saveSiteStrategy(input: any) { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_SAVE_SITE_STRATEGY, input); },
+    exportSurfaceEvalFixture(input: any) { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_EXPORT_SURFACE_EVAL_FIXTURE, input); },
     // Bookmarks
     addBookmark(url: string, title: string) { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_ADD_BOOKMARK, url, title); },
     removeBookmark(bookmarkId: string) { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_REMOVE_BOOKMARK, bookmarkId); },
@@ -102,6 +122,8 @@ const api = {
     // Settings
     getSettings() { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_GET_SETTINGS); },
     updateSettings(settings: any) { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_UPDATE_SETTINGS, settings); },
+    getAuthDiagnostics() { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_GET_AUTH_DIAGNOSTICS); },
+    clearGoogleAuthState() { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_CLEAR_GOOGLE_AUTH_STATE); },
     // Extensions
     loadExtension(extPath: string) { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_LOAD_EXTENSION, extPath); },
     removeExtension(extensionId: string) { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_REMOVE_EXTENSION, extensionId); },
@@ -110,6 +132,8 @@ const api = {
     getDownloads() { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_GET_DOWNLOADS); },
     cancelDownload(downloadId: string) { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_CANCEL_DOWNLOAD, downloadId); },
     clearDownloads() { return ipcRenderer.invoke(IPC_CHANNELS.BROWSER_CLEAR_DOWNLOADS); },
+    // Cookie sync
+    reimportCookies() { return ipcRenderer.invoke('browser:reimport-cookies'); },
     // Subscriptions
     onStateUpdate(callback: (state: any) => void) {
       ipcRenderer.on(IPC_CHANNELS.BROWSER_STATE_UPDATE, (_event: any, state: any) => { callback(state); });
@@ -122,11 +146,39 @@ const api = {
     },
   },
 
+  // ── Model (invocation, routing, handoff) ────────────────────────────────
+
+  model: {
+    invoke(taskId: string, prompt: string, owner?: string, options?: { systemPrompt?: string; cwd?: string }) {
+      return ipcRenderer.invoke(IPC_CHANNELS.MODEL_INVOKE, taskId, prompt, owner, options);
+    },
+    cancel(taskId: string) {
+      return ipcRenderer.invoke(IPC_CHANNELS.MODEL_CANCEL, taskId);
+    },
+    getProviders() {
+      return ipcRenderer.invoke(IPC_CHANNELS.MODEL_GET_PROVIDERS);
+    },
+    getTaskMemory(taskId: string) {
+      return ipcRenderer.invoke(IPC_CHANNELS.MODEL_GET_TASK_MEMORY, taskId);
+    },
+    resolve(prompt: string, explicitOwner?: string) {
+      return ipcRenderer.invoke(IPC_CHANNELS.MODEL_RESOLVE, prompt, explicitOwner);
+    },
+    handoff(taskId: string, from: string, to: string) {
+      return ipcRenderer.invoke(IPC_CHANNELS.MODEL_HANDOFF, taskId, from, to);
+    },
+    onProgress(callback: (progress: any) => void) {
+      ipcRenderer.on(IPC_CHANNELS.MODEL_PROGRESS, (_event: any, progress: any) => {
+        callback(progress);
+      });
+    },
+  },
+
   // ── Terminal (raw PTY I/O, queries, subscriptions) ──────────────────────
 
   terminal: {
-    startSession() {
-      return ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_START_SESSION);
+    startSession(cols?: number, rows?: number) {
+      return ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_START_SESSION, cols, rows);
     },
     getSession() {
       return ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_GET_SESSION);
@@ -167,6 +219,7 @@ const api = {
     ipcRenderer.removeAllListeners(IPC_CHANNELS.BROWSER_NAV_UPDATE);
     ipcRenderer.removeAllListeners(IPC_CHANNELS.BROWSER_FIND_UPDATE);
     ipcRenderer.removeAllListeners(IPC_CHANNELS.SURFACE_ACTION_UPDATE);
+    ipcRenderer.removeAllListeners(IPC_CHANNELS.MODEL_PROGRESS);
   },
 };
 

@@ -15,13 +15,16 @@ function broadcastToRenderers(event: AppEvent): void {
   }
 }
 
-function broadcastState(): void {
-  const state = appStateStore.getState();
+function broadcastOnChannel(channel: string, data: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed() && win.webContents) {
-      win.webContents.send(IPC_CHANNELS.STATE_UPDATE, state);
+      win.webContents.send(channel, data);
     }
   }
+}
+
+function broadcastState(): void {
+  broadcastOnChannel(IPC_CHANNELS.STATE_UPDATE, appStateStore.getState());
 }
 
 export function initEventRouter(): void {
@@ -119,45 +122,24 @@ export function initEventRouter(): void {
   // ── Surface action events ──────────────────────────────────────────────
 
   eventBus.on(AppEventType.SURFACE_ACTION_SUBMITTED, (event) => {
-    // Broadcast update to renderers on dedicated channel
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed() && win.webContents) {
-        win.webContents.send('workspace:surface-action-update', event.payload.record);
-      }
-    }
+    broadcastOnChannel('workspace:surface-action-update', event.payload.record);
   });
 
   eventBus.on(AppEventType.SURFACE_ACTION_STARTED, (event) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed() && win.webContents) {
-        win.webContents.send('workspace:surface-action-update', event.payload.record);
-      }
-    }
+    broadcastOnChannel('workspace:surface-action-update', event.payload.record);
   });
 
   eventBus.on(AppEventType.SURFACE_ACTION_COMPLETED, (event) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed() && win.webContents) {
-        win.webContents.send('workspace:surface-action-update', event.payload.record);
-      }
-    }
+    broadcastOnChannel('workspace:surface-action-update', event.payload.record);
   });
 
   eventBus.on(AppEventType.SURFACE_ACTION_FAILED, (event) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed() && win.webContents) {
-        win.webContents.send('workspace:surface-action-update', event.payload.record);
-      }
-    }
+    broadcastOnChannel('workspace:surface-action-update', event.payload.record);
   });
 
   // Terminal session output: broadcast on dedicated channel
   eventBus.on(AppEventType.TERMINAL_SESSION_OUTPUT, (event) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed() && win.webContents) {
-        win.webContents.send('terminal:output', event.payload.data);
-      }
-    }
+    broadcastOnChannel('terminal:output', event.payload.data);
   });
 
   eventBus.on(AppEventType.TERMINAL_STATUS_UPDATED, () => {
@@ -165,35 +147,19 @@ export function initEventRouter(): void {
   });
 
   eventBus.on(AppEventType.TERMINAL_SESSION_EXITED, (event) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed() && win.webContents) {
-        win.webContents.send('terminal:exit', event.payload.exitCode);
-      }
-    }
+    broadcastOnChannel('terminal:exit', event.payload.exitCode);
   });
 
   eventBus.on(AppEventType.TERMINAL_SESSION_STARTED, (event) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed() && win.webContents) {
-        win.webContents.send('terminal:status', event.payload.session);
-      }
-    }
+    broadcastOnChannel('terminal:status', event.payload.session);
   });
 
   eventBus.on(AppEventType.TERMINAL_SESSION_RESTARTED, (event) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed() && win.webContents) {
-        win.webContents.send('terminal:status', event.payload.session);
-      }
-    }
+    broadcastOnChannel('terminal:status', event.payload.session);
   });
 
   eventBus.on(AppEventType.TERMINAL_SESSION_REATTACHED, (event) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed() && win.webContents) {
-        win.webContents.send('terminal:status', event.payload.session);
-      }
-    }
+    broadcastOnChannel('terminal:status', event.payload.session);
   });
 
   // ── Browser runtime events ─────────────────────────────────────────────
@@ -213,19 +179,11 @@ export function initEventRouter(): void {
 
   // Push browser state and nav updates to renderers on dedicated channels
   eventBus.on(AppEventType.BROWSER_STATE_CHANGED, (event) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed() && win.webContents) {
-        win.webContents.send('browser:state-update', event.payload.state);
-      }
-    }
+    broadcastOnChannel('browser:state-update', event.payload.state);
   });
 
   eventBus.on(AppEventType.BROWSER_NAVIGATION_UPDATED, (event) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed() && win.webContents) {
-        win.webContents.send('browser:nav-update', event.payload.navigation);
-      }
-    }
+    broadcastOnChannel('browser:nav-update', event.payload.navigation);
   });
 
   eventBus.on(AppEventType.BROWSER_NAVIGATION_FAILED, (event) => {
@@ -265,6 +223,50 @@ export function initEventRouter(): void {
         source: 'browser',
         message: `Download ${dl.state}: ${dl.filename}`,
       },
+    });
+  });
+
+  // ── Model events ──────────────────────────────────────────────────
+
+  eventBus.on(AppEventType.MODEL_PROVIDER_DETECTED, (event) => {
+    appStateStore.dispatch({
+      type: ActionType.ADD_LOG,
+      log: {
+        id: generateId('log'),
+        timestamp: Date.now(),
+        level: event.payload.available ? 'info' : 'warn',
+        source: 'system',
+        message: `Provider ${event.payload.providerId}: ${event.payload.available ? 'available' : 'unavailable'} (${event.payload.detail})`,
+      },
+    });
+  });
+
+  eventBus.on(AppEventType.MODEL_INVOCATION_PROGRESS, (event) => {
+    broadcastOnChannel(IPC_CHANNELS.MODEL_PROGRESS, event.payload.progress);
+  });
+
+  eventBus.on(AppEventType.MODEL_INVOCATION_STARTED, (event) => {
+    appStateStore.dispatch({
+      type: ActionType.UPDATE_TASK,
+      taskId: event.payload.taskId,
+      updates: { status: 'running', updatedAt: Date.now() },
+    });
+    appStateStore.dispatch({ type: ActionType.SET_ACTIVE_TASK, taskId: event.payload.taskId });
+  });
+
+  eventBus.on(AppEventType.MODEL_INVOCATION_COMPLETED, (event) => {
+    appStateStore.dispatch({
+      type: ActionType.UPDATE_TASK,
+      taskId: event.payload.result.taskId,
+      updates: { status: 'completed', updatedAt: Date.now() },
+    });
+  });
+
+  eventBus.on(AppEventType.MODEL_INVOCATION_FAILED, (event) => {
+    appStateStore.dispatch({
+      type: ActionType.UPDATE_TASK,
+      taskId: event.payload.taskId,
+      updates: { status: 'failed', updatedAt: Date.now() },
     });
   });
 
