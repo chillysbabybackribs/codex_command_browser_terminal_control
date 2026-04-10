@@ -253,3 +253,72 @@ describe('SurfaceExecutionController — replacesSameKind', () => {
     resolveFirst();
   });
 });
+
+const BYPASS_CLEAR: ActionConcurrencyPolicy = { mode: 'bypass', clearsQueue: true };
+
+describe('SurfaceExecutionController — clearsQueue', () => {
+  let executeFn: ReturnType<typeof vi.fn>;
+  let onFail: ReturnType<typeof vi.fn>;
+  let controller: SurfaceExecutionController;
+
+  beforeEach(() => {
+    executeFn = vi.fn();
+    onFail = vi.fn();
+    controller = new SurfaceExecutionController('browser', executeFn, onFail);
+  });
+
+  it('cancels all queued actions and executes immediately', async () => {
+    let resolveFirst!: () => void;
+    executeFn.mockImplementationOnce(() => new Promise<void>(r => { resolveFirst = r; }));
+    executeFn.mockResolvedValue(undefined);
+
+    const a1 = makeAction({ id: 'sa_1', kind: 'browser.navigate' });
+    const a2 = makeAction({ id: 'sa_2', kind: 'browser.reload' });
+    const stop = makeAction({ id: 'sa_stop', kind: 'browser.stop' });
+
+    controller.submit(a1, SERIALIZE);  // runs
+    controller.submit(a2, SERIALIZE);  // queued
+
+    controller.submit(stop, BYPASS_CLEAR);
+
+    // a2 should have been cancelled
+    expect(onFail).toHaveBeenCalledTimes(1);
+    expect(onFail).toHaveBeenCalledWith(a2, 'Cancelled by browser.stop');
+
+    // Queue should be empty
+    expect(controller.getQueueLength()).toBe(0);
+
+    // stop should have executed immediately (bypass)
+    expect(executeFn).toHaveBeenCalledWith(stop);
+
+    resolveFirst();
+  });
+
+  it('does not touch the running action', async () => {
+    let resolveFirst!: () => void;
+    executeFn.mockImplementationOnce(() => new Promise<void>(r => { resolveFirst = r; }));
+    executeFn.mockResolvedValue(undefined);
+
+    const a1 = makeAction({ id: 'sa_1', kind: 'browser.navigate' });
+    const stop = makeAction({ id: 'sa_stop', kind: 'browser.stop' });
+
+    controller.submit(a1, SERIALIZE);     // runs
+    controller.submit(stop, BYPASS_CLEAR); // bypass + clear
+
+    // a1 is running, should NOT be in onFail
+    expect(onFail).not.toHaveBeenCalled();
+    expect(controller.getActive()?.id).toBe('sa_1');
+
+    resolveFirst();
+  });
+
+  it('works when queue is already empty', () => {
+    executeFn.mockResolvedValue(undefined);
+
+    const stop = makeAction({ id: 'sa_stop', kind: 'browser.stop' });
+    controller.submit(stop, BYPASS_CLEAR);
+
+    expect(onFail).not.toHaveBeenCalled();
+    expect(executeFn).toHaveBeenCalledWith(stop);
+  });
+});

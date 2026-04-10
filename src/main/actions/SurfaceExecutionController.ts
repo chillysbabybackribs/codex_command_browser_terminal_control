@@ -16,6 +16,9 @@ export class SurfaceExecutionController {
 
   submit(action: SurfaceAction, policy: ActionConcurrencyPolicy): void {
     if (policy.mode === 'bypass') {
+      if (policy.clearsQueue) {
+        this.cancelQueued(`Cancelled by ${action.kind}`);
+      }
       this.executeImmediate(action);
     } else {
       this.enqueue(action, policy);
@@ -34,6 +37,13 @@ export class SurfaceExecutionController {
     // Fire-and-forget — bypass does not occupy the active slot or touch the queue.
     // Errors are handled inside the execute callback (router).
     this.execute(action).catch(() => {});
+  }
+
+  private cancelQueued(reason: string): void {
+    const cancelled = this.queue.splice(0);
+    for (const action of cancelled) {
+      this.onPolicyFail(action, reason);
+    }
   }
 
   private enqueue(action: SurfaceAction, policy: ActionConcurrencyPolicy): void {
