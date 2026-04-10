@@ -92,23 +92,23 @@ function renderTabs(tabs: any[], activeTabId: string): void {
 tabList.addEventListener('click', (e: Event) => {
   const target = e.target as HTMLElement;
   const closeId = target.getAttribute('data-close-tab') || target.closest('[data-close-tab]')?.getAttribute('data-close-tab');
-  if (closeId) { e.stopPropagation(); workspaceAPI.browser.closeTab(closeId); return; }
+  if (closeId) { e.stopPropagation(); workspaceAPI.actions.submit({ target: 'browser', kind: 'browser.close-tab', payload: { tabId: closeId } }); return; }
   const tabEl = target.closest('.browser-tab') as HTMLElement | null;
-  if (tabEl) workspaceAPI.browser.activateTab(tabEl.dataset.tabId!);
+  if (tabEl) workspaceAPI.actions.submit({ target: 'browser', kind: 'browser.activate-tab', payload: { tabId: tabEl.dataset.tabId! } });
 });
 
-btnNewTab.addEventListener('click', () => workspaceAPI.browser.createTab());
+btnNewTab.addEventListener('click', () => workspaceAPI.actions.submit({ target: 'browser', kind: 'browser.create-tab', payload: {} }));
 
 // ─── Navigation Controls ────────────────────────────────────────────────────
-btnBack.addEventListener('click', () => workspaceAPI.browser.goBack());
-btnForward.addEventListener('click', () => workspaceAPI.browser.goForward());
-btnReload.addEventListener('click', () => workspaceAPI.browser.reload());
-btnStop.addEventListener('click', () => workspaceAPI.browser.stop());
+btnBack.addEventListener('click', () => workspaceAPI.actions.submit({ target: 'browser', kind: 'browser.back', payload: {} }));
+btnForward.addEventListener('click', () => workspaceAPI.actions.submit({ target: 'browser', kind: 'browser.forward', payload: {} }));
+btnReload.addEventListener('click', () => workspaceAPI.actions.submit({ target: 'browser', kind: 'browser.reload', payload: {} }));
+btnStop.addEventListener('click', () => workspaceAPI.actions.submit({ target: 'browser', kind: 'browser.stop', payload: {} }));
 
 addressInput.addEventListener('keydown', (e: KeyboardEvent) => {
   if (e.key === 'Enter') {
     const url = addressInput.value.trim();
-    if (url) { workspaceAPI.browser.navigate(url); addressInput.blur(); }
+    if (url) { workspaceAPI.actions.submit({ target: 'browser', kind: 'browser.navigate', payload: { url } }); addressInput.blur(); }
   }
 });
 addressInput.addEventListener('focus', () => requestAnimationFrame(() => addressInput.select()));
@@ -277,7 +277,7 @@ dropdownContent.addEventListener('click', (e: Event) => {
   // Navigate to URL
   const navItem = target.closest('[data-nav-url]') as HTMLElement | null;
   if (navItem && !target.hasAttribute('data-remove-bookmark')) {
-    workspaceAPI.browser.navigate(navItem.dataset.navUrl!);
+    workspaceAPI.actions.submit({ target: 'browser', kind: 'browser.navigate', payload: { url: navItem.dataset.navUrl! } });
     closePanel();
     return;
   }
@@ -422,7 +422,7 @@ function updateTerminalMeta(session: TerminalSessionInfo): void {
   terminalMeta.textContent = p.join(' | ');
   if (session.status === 'running') { connectionDot.className = 'status-dot done'; connectionLabel.textContent = session.restored ? 'Reconnected' : 'Connected'; }
 }
-termRestartBtn.addEventListener('click', async () => { termRestartBtn.disabled = true; try { const s = await workspaceAPI.terminal.restart(); updateTerminalMeta(s); term?.clear(); } finally { termRestartBtn.disabled = false; } });
+termRestartBtn.addEventListener('click', async () => { termRestartBtn.disabled = true; try { await workspaceAPI.actions.submit({ target: 'terminal', kind: 'terminal.restart', payload: {} }); term?.clear(); } finally { termRestartBtn.disabled = false; } });
 
 // ─── State Sync ────────────────────────────────────────────────────────────
 function renderState(state: any): void {
@@ -436,16 +436,16 @@ workspaceAPI.onStateUpdate((state: any) => renderState(state));
 document.addEventListener('keydown', (e: KeyboardEvent) => {
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.key === 'l') { e.preventDefault(); addressInput.focus(); addressInput.select(); }
-  if (mod && e.key === 't') { e.preventDefault(); workspaceAPI.browser.createTab(); }
-  if (mod && e.key === 'w') { e.preventDefault(); if (lastBrowserState) workspaceAPI.browser.closeTab(lastBrowserState.activeTabId); }
+  if (mod && e.key === 't') { e.preventDefault(); workspaceAPI.actions.submit({ target: 'browser', kind: 'browser.create-tab', payload: {} }); }
+  if (mod && e.key === 'w') { e.preventDefault(); if (lastBrowserState) workspaceAPI.actions.submit({ target: 'browser', kind: 'browser.close-tab', payload: { tabId: lastBrowserState.activeTabId } }); }
   if (mod && e.key === 'f') { e.preventDefault(); showFindBar(); }
   if (mod && e.key === '=') { e.preventDefault(); workspaceAPI.browser.zoomIn(); }
   if (mod && e.key === '-') { e.preventDefault(); workspaceAPI.browser.zoomOut(); }
   if (mod && e.key === '0') { e.preventDefault(); workspaceAPI.browser.zoomReset(); }
   if (mod && e.key === 'd') { e.preventDefault(); if (lastBrowserState) workspaceAPI.browser.addBookmark(lastBrowserState.navigation.url, lastBrowserState.navigation.title); }
-  if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); workspaceAPI.browser.goBack(); }
-  if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); workspaceAPI.browser.goForward(); }
-  if (e.key === 'F5') { e.preventDefault(); workspaceAPI.browser.reload(); }
+  if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); workspaceAPI.actions.submit({ target: 'browser', kind: 'browser.back', payload: {} }); }
+  if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); workspaceAPI.actions.submit({ target: 'browser', kind: 'browser.forward', payload: {} }); }
+  if (e.key === 'F5') { e.preventDefault(); workspaceAPI.actions.submit({ target: 'browser', kind: 'browser.reload', payload: {} }); }
   if (e.key === 'F12') { e.preventDefault(); workspaceAPI.browser.toggleDevTools(); }
   if (e.key === 'Escape') { if (findBar.style.display !== 'none') hideFindBar(); if (activePanel) closePanel(); }
 });

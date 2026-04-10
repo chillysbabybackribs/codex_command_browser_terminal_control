@@ -1,4 +1,4 @@
-import { AppState, ExecutionLayoutPreset, LogLevel, LogSource, SurfaceExecutionState, TaskStatus } from './appState';
+import { AppState, ExecutionLayoutPreset, LogLevel, LogSource, TaskStatus } from './appState';
 import { AppEventType } from './events';
 import { PhysicalWindowRole } from './windowRoles';
 import { TerminalSessionInfo } from './terminal';
@@ -19,34 +19,19 @@ export const IPC_CHANNELS = {
   APPLY_EXECUTION_PRESET: 'workspace:apply-execution-preset',
   SET_SPLIT_RATIO: 'workspace:set-split-ratio',
 
-  // Legacy surface action channels
-  REQUEST_BROWSER_ACTION: 'workspace:request-browser-action',
-  REQUEST_TERMINAL_ACTION: 'workspace:request-terminal-action',
-  UPDATE_SURFACE_STATUS: 'workspace:update-surface-status',
-
-  // Orchestrated surface action channels
+  // Surface action channels
   SUBMIT_SURFACE_ACTION: 'workspace:submit-surface-action',
   GET_RECENT_ACTIONS: 'workspace:get-recent-actions',
   GET_ACTIONS_BY_TARGET: 'workspace:get-actions-by-target',
   GET_ACTIONS_BY_TASK: 'workspace:get-actions-by-task',
   SURFACE_ACTION_UPDATE: 'workspace:surface-action-update',
 
-  // Browser runtime channels
+  // Browser runtime channels (queries, management, UI features)
   BROWSER_GET_STATE: 'browser:get-state',
-  BROWSER_NAVIGATE: 'browser:navigate',
-  BROWSER_GO_BACK: 'browser:go-back',
-  BROWSER_GO_FORWARD: 'browser:go-forward',
-  BROWSER_RELOAD: 'browser:reload',
-  BROWSER_STOP: 'browser:stop',
   BROWSER_GET_HISTORY: 'browser:get-history',
   BROWSER_CLEAR_HISTORY: 'browser:clear-history',
   BROWSER_CLEAR_DATA: 'browser:clear-data',
   BROWSER_REPORT_BOUNDS: 'browser:report-bounds',
-
-  // Tab management
-  BROWSER_CREATE_TAB: 'browser:create-tab',
-  BROWSER_CLOSE_TAB: 'browser:close-tab',
-  BROWSER_ACTIVATE_TAB: 'browser:activate-tab',
   BROWSER_GET_TABS: 'browser:get-tabs',
 
   // Bookmarks
@@ -92,7 +77,6 @@ export const IPC_CHANNELS = {
   TERMINAL_GET_SESSION: 'terminal:get-session',
   TERMINAL_WRITE: 'terminal:write',
   TERMINAL_RESIZE: 'terminal:resize',
-  TERMINAL_RESTART: 'terminal:restart',
   TERMINAL_OUTPUT: 'terminal:output',
   TERMINAL_STATUS: 'terminal:status',
   TERMINAL_EXIT: 'terminal:exit',
@@ -112,12 +96,7 @@ export interface WorkspaceAPI {
   applyExecutionPreset(preset: ExecutionLayoutPreset): Promise<void>;
   setSplitRatio(ratio: number): Promise<void>;
 
-  // Legacy surface actions
-  requestBrowserAction(action: string, taskId?: string): Promise<void>;
-  requestTerminalAction(action: string, taskId?: string): Promise<void>;
-  updateSurfaceStatus(surface: 'browser' | 'terminal', status: SurfaceExecutionState): Promise<void>;
-
-  // Orchestrated surface actions
+  // Surface actions
   actions: {
     submit(input: SurfaceActionInput): Promise<SurfaceActionRecord>;
     listRecent(limit?: number): Promise<SurfaceActionRecord[]>;
@@ -129,22 +108,13 @@ export interface WorkspaceAPI {
   onStateUpdate(callback: (state: AppState) => void): void;
   onEvent(callback: (type: AppEventType, payload: unknown) => void): void;
 
-  // Browser runtime API
+  // Browser runtime API (queries, management, UI features, subscriptions)
   browser: {
     getState(): Promise<BrowserState>;
-    navigate(url: string): Promise<void>;
-    goBack(): Promise<void>;
-    goForward(): Promise<void>;
-    reload(): Promise<void>;
-    stop(): Promise<void>;
     getHistory(): Promise<BrowserHistoryEntry[]>;
     clearHistory(): Promise<void>;
     clearData(): Promise<void>;
     reportBounds(bounds: { x: number; y: number; width: number; height: number }): Promise<void>;
-    // Tabs
-    createTab(url?: string): Promise<TabInfo>;
-    closeTab(tabId: string): Promise<void>;
-    activateTab(tabId: string): Promise<void>;
     getTabs(): Promise<TabInfo[]>;
     // Bookmarks
     addBookmark(url: string, title: string): Promise<BookmarkEntry>;
@@ -172,19 +142,18 @@ export interface WorkspaceAPI {
     getDownloads(): Promise<BrowserDownloadState[]>;
     cancelDownload(downloadId: string): Promise<void>;
     clearDownloads(): Promise<void>;
-    // Listeners
+    // Subscriptions
     onStateUpdate(callback: (state: BrowserState) => void): void;
     onNavUpdate(callback: (nav: BrowserNavigationState) => void): void;
     onFindUpdate(callback: (find: { activeMatch: number; totalMatches: number }) => void): void;
   };
 
-  // Terminal session API
+  // Terminal session API (raw PTY I/O, queries, subscriptions)
   terminal: {
     startSession(): Promise<TerminalSessionInfo>;
     getSession(): Promise<TerminalSessionInfo | null>;
     write(data: string): Promise<void>;
     resize(cols: number, rows: number): Promise<void>;
-    restart(): Promise<TerminalSessionInfo>;
     captureScrollback(): Promise<string>;
     onOutput(callback: (data: string) => void): void;
     onStatus(callback: (session: TerminalSessionInfo) => void): void;

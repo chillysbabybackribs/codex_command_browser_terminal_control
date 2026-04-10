@@ -1,5 +1,5 @@
 import { PhysicalWindowRole, SurfaceRole } from './windowRoles';
-import { TaskRecord, LogRecord, ExecutionLayoutPreset, SurfaceExecutionState, AppState, WindowBounds } from './appState';
+import { TaskRecord, LogRecord, ExecutionLayoutPreset, AppState, WindowBounds } from './appState';
 import { TerminalSessionInfo, TerminalSessionStatus } from './terminal';
 import {
   BrowserState, BrowserNavigationState, BrowserDownloadState,
@@ -22,18 +22,11 @@ export enum AppEventType {
   EXECUTION_SPLIT_CHANGED = 'EXECUTION_SPLIT_CHANGED',
   EXECUTION_LAYOUT_APPLIED = 'EXECUTION_LAYOUT_APPLIED',
 
-  // Legacy surface action events (kept for backward compat)
-  BROWSER_ACTION_REQUESTED = 'BROWSER_ACTION_REQUESTED',
-  BROWSER_ACTION_UPDATED = 'BROWSER_ACTION_UPDATED',
-  TERMINAL_ACTION_REQUESTED = 'TERMINAL_ACTION_REQUESTED',
-  TERMINAL_ACTION_UPDATED = 'TERMINAL_ACTION_UPDATED',
-
-  // Orchestrated surface action lifecycle events
+  // Surface action lifecycle events
   SURFACE_ACTION_SUBMITTED = 'SURFACE_ACTION_SUBMITTED',
   SURFACE_ACTION_STARTED = 'SURFACE_ACTION_STARTED',
   SURFACE_ACTION_COMPLETED = 'SURFACE_ACTION_COMPLETED',
   SURFACE_ACTION_FAILED = 'SURFACE_ACTION_FAILED',
-  SURFACE_ACTION_CANCELLED = 'SURFACE_ACTION_CANCELLED',
   SURFACE_ACTION_RESULT_UPDATED = 'SURFACE_ACTION_RESULT_UPDATED',
 
   APP_STATE_SYNCED = 'APP_STATE_SYNCED',
@@ -92,17 +85,11 @@ export type AppEventPayloads = {
   [AppEventType.EXECUTION_SPLIT_CHANGED]: { ratio: number };
   [AppEventType.EXECUTION_LAYOUT_APPLIED]: { preset: ExecutionLayoutPreset };
 
-  [AppEventType.BROWSER_ACTION_REQUESTED]: { action: string; taskId?: string };
-  [AppEventType.BROWSER_ACTION_UPDATED]: { status: SurfaceExecutionState };
-  [AppEventType.TERMINAL_ACTION_REQUESTED]: { action: string; taskId?: string };
-  [AppEventType.TERMINAL_ACTION_UPDATED]: { status: SurfaceExecutionState };
-
-  // Orchestrated surface action lifecycle payloads
+  // Surface action lifecycle payloads
   [AppEventType.SURFACE_ACTION_SUBMITTED]: { record: SurfaceActionRecord };
   [AppEventType.SURFACE_ACTION_STARTED]: { record: SurfaceActionRecord };
   [AppEventType.SURFACE_ACTION_COMPLETED]: { record: SurfaceActionRecord };
   [AppEventType.SURFACE_ACTION_FAILED]: { record: SurfaceActionRecord };
-  [AppEventType.SURFACE_ACTION_CANCELLED]: { record: SurfaceActionRecord };
   [AppEventType.SURFACE_ACTION_RESULT_UPDATED]: { record: SurfaceActionRecord };
 
   [AppEventType.APP_STATE_SYNCED]: { state: AppState };

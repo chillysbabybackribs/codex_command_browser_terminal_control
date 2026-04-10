@@ -116,62 +116,7 @@ export function initEventRouter(): void {
     });
   });
 
-  // Surface action events
-  eventBus.on(AppEventType.BROWSER_ACTION_REQUESTED, (event) => {
-    appStateStore.dispatch({
-      type: ActionType.SET_SURFACE_STATUS,
-      surface: 'browser',
-      status: { status: 'running', lastUpdatedAt: Date.now(), detail: event.payload.action },
-    });
-    appStateStore.dispatch({
-      type: ActionType.ADD_LOG,
-      log: {
-        id: generateId('log'),
-        timestamp: Date.now(),
-        level: 'info',
-        source: 'browser',
-        message: `Browser action requested: ${event.payload.action}`,
-        taskId: event.payload.taskId,
-      },
-    });
-  });
-
-  eventBus.on(AppEventType.BROWSER_ACTION_UPDATED, (event) => {
-    appStateStore.dispatch({
-      type: ActionType.SET_SURFACE_STATUS,
-      surface: 'browser',
-      status: event.payload.status,
-    });
-  });
-
-  eventBus.on(AppEventType.TERMINAL_ACTION_REQUESTED, (event) => {
-    appStateStore.dispatch({
-      type: ActionType.SET_SURFACE_STATUS,
-      surface: 'terminal',
-      status: { status: 'running', lastUpdatedAt: Date.now(), detail: event.payload.action },
-    });
-    appStateStore.dispatch({
-      type: ActionType.ADD_LOG,
-      log: {
-        id: generateId('log'),
-        timestamp: Date.now(),
-        level: 'info',
-        source: 'terminal',
-        message: `Terminal action requested: ${event.payload.action}`,
-        taskId: event.payload.taskId,
-      },
-    });
-  });
-
-  eventBus.on(AppEventType.TERMINAL_ACTION_UPDATED, (event) => {
-    appStateStore.dispatch({
-      type: ActionType.SET_SURFACE_STATUS,
-      surface: 'terminal',
-      status: event.payload.status,
-    });
-  });
-
-  // ── Orchestrated surface action events ─────────────────────────────────
+  // ── Surface action events ──────────────────────────────────────────────
 
   eventBus.on(AppEventType.SURFACE_ACTION_SUBMITTED, (event) => {
     // Broadcast update to renderers on dedicated channel
@@ -199,14 +144,6 @@ export function initEventRouter(): void {
   });
 
   eventBus.on(AppEventType.SURFACE_ACTION_FAILED, (event) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed() && win.webContents) {
-        win.webContents.send('workspace:surface-action-update', event.payload.record);
-      }
-    }
-  });
-
-  eventBus.on(AppEventType.SURFACE_ACTION_CANCELLED, (event) => {
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.isDestroyed() && win.webContents) {
         win.webContents.send('workspace:surface-action-update', event.payload.record);

@@ -17,6 +17,9 @@ const BROWSER_KINDS: ActionKindDef[] = [
   { value: 'browser.forward', label: 'Forward', hasInput: false, placeholder: '' },
   { value: 'browser.reload', label: 'Reload', hasInput: false, placeholder: '' },
   { value: 'browser.stop', label: 'Stop', hasInput: false, placeholder: '' },
+  { value: 'browser.create-tab', label: 'New Tab', hasInput: true, placeholder: 'URL (optional)...' },
+  { value: 'browser.close-tab', label: 'Close Tab', hasInput: true, placeholder: 'Tab ID...' },
+  { value: 'browser.activate-tab', label: 'Switch Tab', hasInput: true, placeholder: 'Tab ID...' },
 ];
 
 const TERMINAL_KINDS: ActionKindDef[] = [
@@ -109,6 +112,17 @@ async function submitAction(): Promise<void> {
     const url = actionPayloadInput.value.trim();
     if (!url) { actionPayloadInput.focus(); return; }
     payload = { url };
+  } else if (kind === 'browser.create-tab') {
+    const url = actionPayloadInput.value.trim();
+    if (url) payload = { url };
+  } else if (kind === 'browser.close-tab') {
+    const tabId = actionPayloadInput.value.trim();
+    if (!tabId) { actionPayloadInput.focus(); return; }
+    payload = { tabId };
+  } else if (kind === 'browser.activate-tab') {
+    const tabId = actionPayloadInput.value.trim();
+    if (!tabId) { actionPayloadInput.focus(); return; }
+    payload = { tabId };
   } else if (kind === 'terminal.execute') {
     const command = actionPayloadInput.value.trim();
     if (!command) { actionPayloadInput.focus(); return; }
@@ -288,7 +302,7 @@ workspaceAPI.browser.onStateUpdate((bs: any) => {
   browserStatusDot.className = `status-dot ${dotMap[bs.surfaceStatus] || 'idle'}`;
 });
 
-termRestartBtn.addEventListener('click', async () => { termRestartBtn.disabled = true; try { await workspaceAPI.terminal.restart(); } finally { termRestartBtn.disabled = false; } });
+termRestartBtn.addEventListener('click', async () => { termRestartBtn.disabled = true; try { await workspaceAPI.actions.submit({ target: 'terminal', kind: 'terminal.restart', payload: {} }); } finally { termRestartBtn.disabled = false; } });
 
 // ─── Init ───────────────────────────────────────────────────────────────────
 

@@ -21,4 +21,25 @@ function copyRecursive(src, dest) {
 }
 
 copyRecursive(srcBase, distBase);
+
+// Copy xterm.js assets into dist/renderer/vendor/
+const vendorDir = path.join(distBase, 'vendor');
+fs.mkdirSync(vendorDir, { recursive: true });
+
+const nodeModules = path.join(__dirname, '..', 'node_modules');
+
+const xtermFiles = [
+  { src: path.join(nodeModules, '@xterm', 'xterm', 'lib', 'xterm.js'), dest: path.join(vendorDir, 'xterm.js') },
+  { src: path.join(nodeModules, '@xterm', 'xterm', 'css', 'xterm.css'), dest: path.join(vendorDir, 'xterm.css') },
+  { src: path.join(nodeModules, '@xterm', 'addon-fit', 'lib', 'addon-fit.js'), dest: path.join(vendorDir, 'addon-fit.js') },
+];
+
+for (const file of xtermFiles) {
+  if (fs.existsSync(file.src)) {
+    fs.copyFileSync(file.src, file.dest);
+  } else {
+    console.warn(`Warning: ${file.src} not found`);
+  }
+}
+
 console.log('Renderer assets copied.');

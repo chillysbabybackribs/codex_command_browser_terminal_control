@@ -3,48 +3,79 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'wasm-unsafe-eval'">
   <title>Command Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../shared/styles.css">
   <link rel="stylesheet" href="command.css">
 </head>
 <body>
   <div class="window-container">
     <header class="window-header">
-      <div class="role-badge role-command">
-        <span class="dot"></span>
-        COMMAND CENTER
-      </div>
+      <div class="role-badge role-command"><span class="dot"></span>COMMAND CENTER</div>
       <div class="task-summary" id="taskSummary">No active task</div>
       <div class="header-right">
         <div class="surface-indicators">
-          <div class="surface-indicator">
-            <span class="label">Browser</span>
-            <span class="status-dot idle" id="browserStatusDot"></span>
-          </div>
-          <div class="surface-indicator">
-            <span class="label">Terminal</span>
-            <span class="status-dot idle" id="terminalStatusDot"></span>
-          </div>
+          <div class="surface-indicator"><span class="label">Browser</span><span class="status-dot idle" id="browserStatusDot"></span></div>
+          <div class="surface-indicator"><span class="label">Terminal</span><span class="status-dot idle" id="terminalStatusDot"></span></div>
         </div>
       </div>
     </header>
 
-    <div class="layout-bar">
-      <span class="layout-label">Layout:</span>
-      <div class="layout-controls" id="layoutControls">
-        <button class="btn active" data-preset="default">Default</button>
-        <button class="btn" data-preset="focus-browser">Browser</button>
-        <button class="btn" data-preset="focus-terminal">Terminal</button>
-        <button class="btn" data-preset="focus-command">Command</button>
-        <button class="btn" id="resetLayoutBtn">Reset</button>
+    <div class="controls-bar">
+      <div class="control-group">
+        <span class="control-label">Execution Split:</span>
+        <div class="layout-controls" id="layoutControls">
+          <button class="btn active" data-preset="balanced">Balanced</button>
+          <button class="btn" data-preset="focus-browser">Browser</button>
+          <button class="btn" data-preset="focus-terminal">Terminal</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <div class="terminal-session-info">
+          <span class="session-label">Terminal:</span>
+          <span class="status-dot idle" id="termPanelDot"></span>
+          <span class="session-status" id="termPanelStatus">No session</span>
+          <span class="session-meta" id="termPanelMeta"></span>
+          <button class="btn btn-sm" id="termRestartBtn">Restart</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action Composer -->
+    <div class="action-composer" id="actionComposer">
+      <div class="action-composer-row">
+        <div class="action-target-selector">
+          <button class="target-btn active" data-target="browser" id="targetBrowserBtn">Browser</button>
+          <button class="target-btn" data-target="terminal" id="targetTerminalBtn">Terminal</button>
+        </div>
+        <select class="action-kind-select" id="actionKindSelect">
+          <option value="browser.navigate">Navigate</option>
+          <option value="browser.back">Back</option>
+          <option value="browser.forward">Forward</option>
+          <option value="browser.reload">Reload</option>
+          <option value="browser.stop">Stop</option>
+        </select>
+        <input type="text" class="action-payload-input" id="actionPayloadInput" placeholder="URL..." autocomplete="off">
+        <button class="btn primary btn-sm" id="actionSubmitBtn">Execute</button>
+      </div>
+    </div>
+
+    <!-- Recent Actions -->
+    <div class="actions-panel" id="actionsPanel">
+      <div class="actions-panel-header">
+        <span class="actions-title">Recent Actions</span>
+        <span class="actions-count" id="actionsCount">0</span>
+      </div>
+      <div class="actions-list" id="actionsList">
+        <div class="empty-state">No actions yet</div>
       </div>
     </div>
 
     <div class="window-body">
-      <div class="task-list" id="taskList">
-        <div class="empty-state">No tasks yet</div>
-      </div>
+      <div class="task-list" id="taskList"><div class="empty-state">No tasks yet</div></div>
       <div class="log-stream" id="logStream"></div>
     </div>
 
@@ -54,11 +85,8 @@
     </div>
 
     <div class="status-bar">
-      <div class="status-indicator">
-        <span class="status-dot done" id="syncDot"></span>
-        <span id="syncLabel">Synced</span>
-      </div>
-      <span id="layoutLabel">Layout: default</span>
+      <div class="status-indicator"><span class="status-dot done" id="syncDot"></span><span id="syncLabel">Synced</span></div>
+      <span id="splitLabel">Split: 50/50</span>
       <span id="taskCount">Tasks: 0</span>
     </div>
   </div>

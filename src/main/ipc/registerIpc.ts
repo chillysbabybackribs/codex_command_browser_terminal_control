@@ -5,7 +5,7 @@ import { eventBus } from '../events/eventBus';
 import { AppEventType } from '../../shared/types/events';
 import { getRoleByWebContentsId } from '../windows/windowManager';
 import { generateId } from '../../shared/utils/ids';
-import { TaskRecord, SurfaceExecutionState, ExecutionLayoutPreset, TaskStatus, LogLevel, LogSource } from '../../shared/types/appState';
+import { TaskRecord, ExecutionLayoutPreset, TaskStatus, LogLevel, LogSource } from '../../shared/types/appState';
 import { terminalService } from '../terminal/TerminalService';
 import { browserService } from '../browser/BrowserService';
 import { surfaceActionRouter } from '../actions/SurfaceActionRouter';
@@ -64,24 +64,7 @@ export function registerIpc(): void {
     eventBus.emit(AppEventType.EXECUTION_SPLIT_CHANGED, { ratio: clamped });
   });
 
-  // Surface actions
-  ipcMain.handle(IPC_CHANNELS.REQUEST_BROWSER_ACTION, (_event, action: string, taskId?: string) => {
-    eventBus.emit(AppEventType.BROWSER_ACTION_REQUESTED, { action, taskId });
-  });
-
-  ipcMain.handle(IPC_CHANNELS.REQUEST_TERMINAL_ACTION, (_event, action: string, taskId?: string) => {
-    eventBus.emit(AppEventType.TERMINAL_ACTION_REQUESTED, { action, taskId });
-  });
-
-  ipcMain.handle(IPC_CHANNELS.UPDATE_SURFACE_STATUS, (_event, surface: 'browser' | 'terminal', status: SurfaceExecutionState) => {
-    if (surface === 'browser') {
-      eventBus.emit(AppEventType.BROWSER_ACTION_UPDATED, { status });
-    } else {
-      eventBus.emit(AppEventType.TERMINAL_ACTION_UPDATED, { status });
-    }
-  });
-
-  // ── Orchestrated surface action IPC handlers ────────────────────────────
+  // ── Surface action IPC handlers ──────────────────────────────────────────
 
   ipcMain.handle(IPC_CHANNELS.SUBMIT_SURFACE_ACTION, async (_event, input: SurfaceActionInput) => {
     return surfaceActionRouter.submit(input);
@@ -116,10 +99,6 @@ export function registerIpc(): void {
     terminalService.resize(cols, rows);
   });
 
-  ipcMain.handle(IPC_CHANNELS.TERMINAL_RESTART, () => {
-    return terminalService.restart();
-  });
-
   ipcMain.handle(IPC_CHANNELS.TERMINAL_CAPTURE_SCROLLBACK, () => {
     return terminalService.captureScrollback();
   });
@@ -128,26 +107,6 @@ export function registerIpc(): void {
 
   ipcMain.handle(IPC_CHANNELS.BROWSER_GET_STATE, () => {
     return browserService.getState();
-  });
-
-  ipcMain.handle(IPC_CHANNELS.BROWSER_NAVIGATE, (_event, url: string) => {
-    browserService.navigate(url);
-  });
-
-  ipcMain.handle(IPC_CHANNELS.BROWSER_GO_BACK, () => {
-    browserService.goBack();
-  });
-
-  ipcMain.handle(IPC_CHANNELS.BROWSER_GO_FORWARD, () => {
-    browserService.goForward();
-  });
-
-  ipcMain.handle(IPC_CHANNELS.BROWSER_RELOAD, () => {
-    browserService.reload();
-  });
-
-  ipcMain.handle(IPC_CHANNELS.BROWSER_STOP, () => {
-    browserService.stop();
   });
 
   ipcMain.handle(IPC_CHANNELS.BROWSER_GET_HISTORY, () => {
@@ -166,16 +125,6 @@ export function registerIpc(): void {
     browserService.setBounds(bounds);
   });
 
-  // Tabs
-  ipcMain.handle(IPC_CHANNELS.BROWSER_CREATE_TAB, (_event, url?: string) => {
-    return browserService.createTab(url);
-  });
-  ipcMain.handle(IPC_CHANNELS.BROWSER_CLOSE_TAB, (_event, tabId: string) => {
-    browserService.closeTab(tabId);
-  });
-  ipcMain.handle(IPC_CHANNELS.BROWSER_ACTIVATE_TAB, (_event, tabId: string) => {
-    browserService.activateTab(tabId);
-  });
   ipcMain.handle(IPC_CHANNELS.BROWSER_GET_TABS, () => {
     return browserService.getTabs();
   });

@@ -1,18 +1,19 @@
 import { BrowserWindow, screen } from 'electron';
 import * as path from 'path';
-import { WindowRole, WINDOW_ROLES } from '../../shared/types/windowRoles';
-import { LayoutPreset, WindowBounds } from '../../shared/types/appState';
+import { PhysicalWindowRole, PHYSICAL_WINDOW_ROLES } from '../../shared/types/windowRoles';
+import { WindowBounds } from '../../shared/types/appState';
 import { appStateStore } from '../state/appStateStore';
 import { ActionType } from '../state/actions';
 import { eventBus } from '../events/eventBus';
 import { AppEventType } from '../../shared/types/events';
-import { getLayoutBounds } from './layoutPresets';
+import { getDefaultWindowBounds } from './layoutPresets';
 import { generateId } from '../../shared/utils/ids';
+import { browserService } from '../browser/BrowserService';
 
-const windows: Map<WindowRole, BrowserWindow> = new Map();
-const roleByWebContentsId: Map<number, WindowRole> = new Map();
+const windows: Map<PhysicalWindowRole, BrowserWindow> = new Map();
+const roleByWebContentsId: Map<number, PhysicalWindowRole> = new Map();
 
-function getRendererPath(role: WindowRole): string {
+function getRendererPath(role: PhysicalWindowRole): string {
   return path.join(__dirname, '..', '..', '..', 'renderer', role, 'index.html');
 }
 
@@ -43,19 +44,24 @@ function validateBounds(bounds: WindowBounds): WindowBounds {
   };
 }
 
-function createRoleWindow(role: WindowRole): BrowserWindow {
+function createRoleWindow(role: PhysicalWindowRole): BrowserWindow {
   const state = appStateStore.getState();
   const winState = state.windows[role];
   const bounds = validateBounds(winState.bounds);
+
+  const titleMap: Record<PhysicalWindowRole, string> = {
+    command: 'V1 Workspace - Command Center',
+    execution: 'V1 Workspace - Execution',
+  };
 
   const win = new BrowserWindow({
     x: bounds.x,
     y: bounds.y,
     width: bounds.width,
     height: bounds.height,
-    minWidth: 400,
-    minHeight: 300,
-    title: `V1 Workspace - ${role.charAt(0).toUpperCase() + role.slice(1)}`,
+    minWidth: 600,
+    minHeight: 400,
+    title: titleMap[role],
     webPreferences: {
       preload: getPreloadPath(),
       contextIsolation: true,
@@ -73,6 +79,11 @@ function createRoleWindow(role: WindowRole): BrowserWindow {
   win.once('ready-to-show', () => {
     win.show();
     appStateStore.dispatch({ type: ActionType.SET_WINDOW_VISIBLE, role, isVisible: true });
+
+    // Initialize browser surface when execution window is ready
+    if (role === 'execution' && !browserService.isCreated()) {
+      browserService.createSurface(win);
+    }
   });
 
   // Debounced bounds tracking
@@ -124,17 +135,17 @@ function createRoleWindow(role: WindowRole): BrowserWindow {
 }
 
 export function createAllWindows(): void {
-  for (const role of WINDOW_ROLES) {
+  for (const role of PHYSICAL_WINDOW_ROLES) {
     createRoleWindow(role);
   }
 }
 
-export function getWindowByRole(role: WindowRole): BrowserWindow | undefined {
+export function getWindowByRole(role: PhysicalWindowRole): BrowserWindow | undefined {
   const win = windows.get(role);
   return win && !win.isDestroyed() ? win : undefined;
 }
 
-export function getRoleByWebContentsId(webContentsId: number): WindowRole | undefined {
+export function getRoleByWebContentsId(webContentsId: number): PhysicalWindowRole | undefined {
   return roleByWebContentsId.get(webContentsId);
 }
 
@@ -147,7 +158,7 @@ export function showAllWindows(): void {
   }
 }
 
-export function focusWindow(role: WindowRole): void {
+export function focusWindow(role: PhysicalWindowRole): void {
   const win = windows.get(role);
   if (win && !win.isDestroyed()) {
     win.show();
@@ -155,33 +166,16 @@ export function focusWindow(role: WindowRole): void {
   }
 }
 
-export function applyLayout(preset: LayoutPreset): void {
-  const bounds = getLayoutBounds(preset);
+export function applyDefaultBounds(): void {
+  const bounds = getDefaultWindowBounds();
 
-  for (const role of WINDOW_ROLES) {
+  for (const role of PHYSICAL_WINDOW_ROLES) {
     const win = windows.get(role);
     if (win && !win.isDestroyed()) {
       const b = bounds[role];
       win.setBounds({ x: b.x, y: b.y, width: b.width, height: b.height });
     }
   }
-
-  eventBus.emit(AppEventType.WINDOW_LAYOUT_APPLIED, { preset });
-  appStateStore.dispatch({
-    type: ActionType.ADD_LOG,
-    log: {
-      id: generateId('log'),
-      timestamp: Date.now(),
-      level: 'info',
-      source: 'system',
-      message: `Layout applied: ${preset}`,
-    },
-  });
-}
-
-export function resetLayout(): void {
-  applyLayout('default');
-  eventBus.emit(AppEventType.WINDOW_LAYOUT_RESET, {});
 }
 
 export function setAppQuitting(): void {

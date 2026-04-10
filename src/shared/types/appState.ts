@@ -1,9 +1,12 @@
-import { WindowRole } from './windowRoles';
+import { PhysicalWindowRole, SurfaceRole, LogSourceRole } from './windowRoles';
+import { TerminalSessionState, createDefaultTerminalState } from './terminal';
+import { BrowserState, createDefaultBrowserState } from './browser';
+import { SurfaceActionRecord } from '../actions/surfaceActionTypes';
 
 export type WindowBounds = { x: number; y: number; width: number; height: number };
 
 export type WindowState = {
-  role: WindowRole;
+  role: PhysicalWindowRole;
   bounds: WindowBounds;
   isVisible: boolean;
   isFocused: boolean;
@@ -21,7 +24,7 @@ export type TaskRecord = {
 };
 
 export type LogLevel = 'info' | 'warn' | 'error';
-export type LogSource = WindowRole | 'system';
+export type LogSource = LogSourceRole;
 
 export type LogRecord = {
   id: string;
@@ -40,19 +43,28 @@ export type SurfaceExecutionState = {
   detail: string;
 };
 
-export type LayoutPreset = 'default' | 'focus-browser' | 'focus-terminal' | 'focus-command';
+// Execution split presets control the browser/terminal ratio
+export type ExecutionLayoutPreset = 'balanced' | 'focus-browser' | 'focus-terminal';
+
+export type ExecutionSplitState = {
+  preset: ExecutionLayoutPreset;
+  ratio: number; // browser width fraction, 0.0 - 1.0
+};
 
 export type AppState = {
-  windows: Record<WindowRole, WindowState>;
-  layoutPreset: LayoutPreset;
+  windows: Record<PhysicalWindowRole, WindowState>;
+  executionSplit: ExecutionSplitState;
   tasks: TaskRecord[];
   activeTaskId: string | null;
   logs: LogRecord[];
   browser: SurfaceExecutionState;
   terminal: SurfaceExecutionState;
+  terminalSession: TerminalSessionState;
+  browserRuntime: BrowserState;
+  surfaceActions: SurfaceActionRecord[];
 };
 
-export function createDefaultWindowState(role: WindowRole): WindowState {
+export function createDefaultWindowState(role: PhysicalWindowRole): WindowState {
   return {
     role,
     bounds: { x: 0, y: 0, width: 800, height: 600 },
@@ -66,14 +78,25 @@ export function createDefaultAppState(): AppState {
   return {
     windows: {
       command: createDefaultWindowState('command'),
-      browser: createDefaultWindowState('browser'),
-      terminal: createDefaultWindowState('terminal'),
+      execution: createDefaultWindowState('execution'),
     },
-    layoutPreset: 'default',
+    executionSplit: { preset: 'balanced', ratio: 0.5 },
     tasks: [],
     activeTaskId: null,
     logs: [],
     browser: { status: 'idle', lastUpdatedAt: null, detail: '' },
     terminal: { status: 'idle', lastUpdatedAt: null, detail: '' },
+    terminalSession: createDefaultTerminalState(),
+    browserRuntime: createDefaultBrowserState(),
+    surfaceActions: [],
   };
+}
+
+// Map preset to default ratio
+export function presetToRatio(preset: ExecutionLayoutPreset): number {
+  switch (preset) {
+    case 'balanced': return 0.5;
+    case 'focus-browser': return 0.7;
+    case 'focus-terminal': return 0.3;
+  }
 }

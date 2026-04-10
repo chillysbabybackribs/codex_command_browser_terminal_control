@@ -2,7 +2,7 @@ interface SurfaceActionRecord {
   id: string;
   target: 'browser' | 'terminal';
   kind: string;
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  status: 'queued' | 'running' | 'completed' | 'failed';
   origin: 'command-center' | 'system';
   payloadSummary: string;
   resultSummary: string | null;
@@ -62,9 +62,6 @@ interface WorkspaceAPI {
   addLog(level: string, source: string, message: string, taskId?: string): Promise<void>;
   applyExecutionPreset(preset: string): Promise<void>;
   setSplitRatio(ratio: number): Promise<void>;
-  requestBrowserAction(action: string, taskId?: string): Promise<void>;
-  requestTerminalAction(action: string, taskId?: string): Promise<void>;
-  updateSurfaceStatus(surface: string, status: any): Promise<void>;
 
   actions: {
     submit(input: { target: string; kind: string; payload: Record<string, unknown>; taskId?: string | null; origin?: string }): Promise<SurfaceActionRecord>;
@@ -79,18 +76,10 @@ interface WorkspaceAPI {
 
   browser: {
     getState(): Promise<BrowserState>;
-    navigate(url: string): Promise<void>;
-    goBack(): Promise<void>;
-    goForward(): Promise<void>;
-    reload(): Promise<void>;
-    stop(): Promise<void>;
     getHistory(): Promise<BrowserHistoryEntry[]>;
     clearHistory(): Promise<void>;
     clearData(): Promise<void>;
     reportBounds(bounds: { x: number; y: number; width: number; height: number }): Promise<void>;
-    createTab(url?: string): Promise<TabInfo>;
-    closeTab(tabId: string): Promise<void>;
-    activateTab(tabId: string): Promise<void>;
     getTabs(): Promise<TabInfo[]>;
     addBookmark(url: string, title: string): Promise<BookmarkEntry>;
     removeBookmark(bookmarkId: string): Promise<void>;
@@ -121,7 +110,6 @@ interface WorkspaceAPI {
     getSession(): Promise<TerminalSessionInfo | null>;
     write(data: string): Promise<void>;
     resize(cols: number, rows: number): Promise<void>;
-    restart(): Promise<TerminalSessionInfo>;
     captureScrollback(): Promise<string>;
     onOutput(callback: (data: string) => void): void;
     onStatus(callback: (session: TerminalSessionInfo) => void): void;

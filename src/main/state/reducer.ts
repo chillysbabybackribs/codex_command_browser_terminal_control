@@ -33,8 +33,8 @@ export function appReducer(state: AppState, action: Action): AppState {
         },
       };
 
-    case ActionType.SET_LAYOUT_PRESET:
-      return { ...state, layoutPreset: action.preset };
+    case ActionType.SET_EXECUTION_SPLIT:
+      return { ...state, executionSplit: action.split };
 
     case ActionType.ADD_TASK:
       return {
@@ -61,6 +61,32 @@ export function appReducer(state: AppState, action: Action): AppState {
 
     case ActionType.SET_SURFACE_STATUS:
       return { ...state, [action.surface]: action.status };
+
+    case ActionType.SET_TERMINAL_SESSION:
+      return {
+        ...state,
+        terminalSession: { session: action.session },
+      };
+
+    case ActionType.SET_BROWSER_RUNTIME:
+      return {
+        ...state,
+        browserRuntime: action.browserRuntime,
+      };
+
+    case ActionType.ADD_SURFACE_ACTION: {
+      const actions = [...state.surfaceActions, action.record];
+      // Keep bounded to 200 most recent
+      return { ...state, surfaceActions: actions.length > 200 ? actions.slice(-200) : actions };
+    }
+
+    case ActionType.UPDATE_SURFACE_ACTION:
+      return {
+        ...state,
+        surfaceActions: state.surfaceActions.map((a) =>
+          a.id === action.id ? { ...a, ...action.updates } : a
+        ),
+      };
 
     case ActionType.REPLACE_STATE:
       return action.state;
