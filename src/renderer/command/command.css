@@ -356,3 +356,163 @@
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Surface State Panel ─────────────────────────────────────────────── */
+
+.surface-state-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.surface-state-section {
+  background: var(--bg-secondary);
+  padding: 8px 16px;
+}
+
+.surface-state-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.surface-state-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-ghost);
+  font-family: var(--font-mono);
+}
+
+.browser-state .surface-state-label {
+  color: var(--accent-green);
+}
+
+.terminal-state .surface-state-label {
+  color: var(--accent-purple);
+}
+
+.surface-state-status {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.surface-state-status.loading {
+  color: var(--accent-orange);
+}
+
+.surface-state-status.ready {
+  color: var(--accent-green);
+}
+
+.surface-state-status.error {
+  color: var(--accent-red);
+}
+
+.surface-state-status.running {
+  color: var(--accent-orange);
+}
+
+.surface-state-details {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.state-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  min-height: 16px;
+}
+
+.state-row-inline {
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.state-key {
+  font-size: 10px;
+  color: var(--text-ghost);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+  min-width: 44px;
+}
+
+.state-value {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.state-tag {
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 2px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.state-tag.active {
+  color: var(--accent-green);
+  border-color: rgba(0, 212, 123, 0.2);
+}
+
+.state-tag.loading {
+  color: var(--accent-orange);
+  border-color: rgba(255, 149, 0, 0.2);
+}
+
+.state-tag.running {
+  color: var(--accent-orange);
+  border-color: rgba(255, 149, 0, 0.2);
+}
+
+/* ── Active Actions Panel ────────────────────────────────────────────── */
+
+.active-actions-panel {
+  max-height: 100px;
+}
+
+.active-actions-panel .actions-title {
+  color: var(--accent-orange);
+}
+
+/* ── Error Visibility ────────────────────────────────────────────────── */
+
+.action-row.status-failed {
+  background: rgba(238, 68, 68, 0.04);
+  border-left-color: var(--accent-red);
+}
+
+.action-row.status-failed .action-error-detail {
+  display: block;
+  color: var(--accent-red);
+  font-size: 10px;
+  padding: 2px 0 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.action-error-detail {
+  display: none;
+}
