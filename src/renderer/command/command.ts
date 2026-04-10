@@ -39,16 +39,13 @@ const taskSummary = document.getElementById('taskSummary')!;
 const layoutControls = document.getElementById('layoutControls')!;
 const splitLabel = document.getElementById('splitLabel')!;
 const taskCount = document.getElementById('taskCount')!;
-const termPanelDot = document.getElementById('termPanelDot')!;
-const termPanelStatus = document.getElementById('termPanelStatus')!;
-const termPanelMeta = document.getElementById('termPanelMeta')!;
-const termRestartBtn = document.getElementById('termRestartBtn') as HTMLButtonElement;
 
 // Action composer
 const targetBrowserBtn = document.getElementById('targetBrowserBtn')!;
 const targetTerminalBtn = document.getElementById('targetTerminalBtn')!;
 const actionKindSelect = document.getElementById('actionKindSelect') as HTMLSelectElement;
 const actionPayloadInput = document.getElementById('actionPayloadInput') as HTMLInputElement;
+const actionTabPicker = document.getElementById('actionTabPicker') as HTMLSelectElement;
 const actionSubmitBtn = document.getElementById('actionSubmitBtn')!;
 
 // Actions panels (split: active + recent)
@@ -57,22 +54,38 @@ const activeActionsCount = document.getElementById('activeActionsCount')!;
 const recentActionsList = document.getElementById('recentActionsList')!;
 const recentActionsCount = document.getElementById('recentActionsCount')!;
 
+// Sidebar
+const logSidebar = document.getElementById('logSidebar')!;
+const sidebarToggleBtn = document.getElementById('sidebarToggleBtn')!;
+const sidebarPinBtn = document.getElementById('sidebarPinBtn')!;
+const sidebarCloseBtn = document.getElementById('sidebarCloseBtn')!;
+
+// Collapsible panel headers
+const activeActionsHeader = document.getElementById('activeActionsHeader')!;
+const recentActionsHeader = document.getElementById('recentActionsHeader')!;
+const activeActionsPanel = document.getElementById('activeActionsPanel')!;
+const recentActionsPanel = document.getElementById('recentActionsPanel')!;
+
 // Surface State Panel
 const browserStateStatus = document.getElementById('browserStateStatus')!;
 const browserStateUrl = document.getElementById('browserStateUrl')!;
 const browserStateTitle = document.getElementById('browserStateTitle')!;
+const browserStateTabs = document.getElementById('browserStateTabs')!;
 const browserStateLoading = document.getElementById('browserStateLoading')!;
 const browserStateBack = document.getElementById('browserStateBack')!;
 const browserStateForward = document.getElementById('browserStateForward')!;
 const terminalStateStatus = document.getElementById('terminalStateStatus')!;
 const terminalStateCommand = document.getElementById('terminalStateCommand')!;
-const terminalStateRunning = document.getElementById('terminalStateRunning')!;
-const terminalStateExitCode = document.getElementById('terminalStateExitCode')!;
+const terminalStateDispatch = document.getElementById('terminalStateDispatch')!;
+const terminalStateShell = document.getElementById('terminalStateShell')!;
+const terminalStatePid = document.getElementById('terminalStatePid')!;
+const terminalStateDims = document.getElementById('terminalStateDims')!;
 
 // ─── State ──────────────────────────────────────────────────────────────────
 
 let currentTarget: 'browser' | 'terminal' = 'browser';
 let actionRecords: any[] = [];
+let cachedTabs: any[] = [];
 
 // ─── Target Selector ────────────────────────────────────────────────────────
 
@@ -97,15 +110,49 @@ function getSelectedKindDef(): ActionKindDef | undefined {
   return kinds.find(k => k.value === actionKindSelect.value);
 }
 
+function isTabPickerKind(kind: string): boolean {
+  return kind === 'browser.close-tab' || kind === 'browser.activate-tab';
+}
+
 function updatePayloadInput(): void {
   const def = getSelectedKindDef();
-  if (def && def.hasInput) {
-    actionPayloadInput.disabled = false;
-    actionPayloadInput.placeholder = def.placeholder;
+  const kind = actionKindSelect.value;
+
+  if (isTabPickerKind(kind)) {
+    actionPayloadInput.style.display = 'none';
+    actionTabPicker.style.display = '';
+    updateTabPicker();
   } else {
-    actionPayloadInput.disabled = true;
-    actionPayloadInput.value = '';
-    actionPayloadInput.placeholder = 'No input needed';
+    actionPayloadInput.style.display = '';
+    actionTabPicker.style.display = 'none';
+    if (def && def.hasInput) {
+      actionPayloadInput.disabled = false;
+      actionPayloadInput.placeholder = def.placeholder;
+    } else {
+      actionPayloadInput.disabled = true;
+      actionPayloadInput.value = '';
+      actionPayloadInput.placeholder = 'No input needed';
+    }
+  }
+}
+
+function updateTabPicker(): void {
+  if (!isTabPickerKind(actionKindSelect.value)) return;
+  const prevVal = actionTabPicker.value;
+  if (cachedTabs.length === 0) {
+    actionTabPicker.innerHTML = '<option value="">No tabs available</option>';
+    actionTabPicker.disabled = true;
+  } else {
+    actionTabPicker.disabled = false;
+    actionTabPicker.innerHTML = cachedTabs.map((t: any) => {
+      const title = t.navigation?.title || t.navigation?.url || 'New Tab';
+      const shortTitle = title.length > 30 ? title.substring(0, 30) + '...' : title;
+      return `<option value="${escapeHtml(t.id)}">${escapeHtml(shortTitle)} [${escapeHtml(t.id.slice(-8))}]</option>`;
+    }).join('');
+    // Restore previous selection if still valid
+    if (prevVal && cachedTabs.some((t: any) => t.id === prevVal)) {
+      actionTabPicker.value = prevVal;
+    }
   }
 }
 
@@ -128,12 +175,12 @@ async function submitAction(): Promise<void> {
     const url = actionPayloadInput.value.trim();
     if (url) payload = { url };
   } else if (kind === 'browser.close-tab') {
-    const tabId = actionPayloadInput.value.trim();
-    if (!tabId) { actionPayloadInput.focus(); return; }
+    const tabId = actionTabPicker.value;
+    if (!tabId) { actionTabPicker.focus(); return; }
     payload = { tabId };
   } else if (kind === 'browser.activate-tab') {
-    const tabId = actionPayloadInput.value.trim();
-    if (!tabId) { actionPayloadInput.focus(); return; }
+    const tabId = actionTabPicker.value;
+    if (!tabId) { actionTabPicker.focus(); return; }
     payload = { tabId };
   } else if (kind === 'terminal.execute') {
     const command = actionPayloadInput.value.trim();
@@ -188,12 +235,15 @@ function renderBrowserSurfaceState(state: any): void {
     browserStateStatus.className = 'surface-state-status';
     browserStateUrl.textContent = '-';
     browserStateTitle.textContent = '-';
+    browserStateTabs.innerHTML = '-';
+    cachedTabs = [];
     browserStateLoading.textContent = 'idle';
     browserStateLoading.className = 'state-tag';
     browserStateBack.textContent = 'back: no';
     browserStateBack.className = 'state-tag';
     browserStateForward.textContent = 'fwd: no';
     browserStateForward.className = 'state-tag';
+    updateTabPicker();
     return;
   }
 
@@ -203,6 +253,22 @@ function renderBrowserSurfaceState(state: any): void {
 
   browserStateUrl.textContent = nav.url || '-';
   browserStateTitle.textContent = nav.title || '-';
+
+  // Render tab list with IDs
+  const tabs = br.tabs || [];
+  const activeTabId = br.activeTabId || '';
+  cachedTabs = tabs;
+  if (tabs.length === 0) {
+    browserStateTabs.innerHTML = '-';
+  } else {
+    browserStateTabs.innerHTML = tabs.map((t: any) => {
+      const isActive = t.id === activeTabId;
+      const title = t.navigation?.title || t.navigation?.url || 'New Tab';
+      const shortTitle = title.length > 20 ? title.substring(0, 20) + '...' : title;
+      return `<span class="tab-id-chip ${isActive ? 'active' : ''}" data-copy-id="${escapeHtml(t.id)}" title="${escapeHtml(t.id)} — ${escapeHtml(title)}">${escapeHtml(shortTitle)} <code>${escapeHtml(t.id.slice(-8))}</code></span>`;
+    }).join('');
+  }
+  updateTabPicker();
 
   browserStateLoading.textContent = nav.isLoading ? 'loading' : 'idle';
   browserStateLoading.className = `state-tag ${nav.isLoading ? 'loading' : ''}`;
@@ -221,11 +287,14 @@ function renderTerminalSurfaceState(state: any): void {
   if (!session) {
     terminalStateStatus.textContent = 'no session';
     terminalStateStatus.className = 'surface-state-status';
+    terminalStateShell.textContent = 'untracked';
     terminalStateCommand.textContent = '-';
-    terminalStateRunning.textContent = 'no session';
-    terminalStateRunning.className = 'state-tag';
-    terminalStateExitCode.textContent = 'exit: -';
-    terminalStateExitCode.className = 'state-tag';
+    terminalStateDispatch.textContent = 'no dispatch';
+    terminalStateDispatch.className = 'state-tag';
+    terminalStatePid.textContent = '-';
+    terminalStatePid.className = 'state-tag';
+    terminalStateDims.textContent = '-';
+    terminalStateDims.className = 'state-tag';
     return;
   }
 
@@ -233,26 +302,29 @@ function renderTerminalSurfaceState(state: any): void {
   terminalStateStatus.textContent = statusLabel;
   terminalStateStatus.className = `surface-state-status ${session.status === 'running' ? 'ready' : session.status === 'error' || session.status === 'exited' ? 'error' : ''}`;
 
+  terminalStateShell.textContent = session.shell || 'untracked';
+
   if (cmd) {
-    terminalStateCommand.textContent = cmd.lastCommand || '-';
-    terminalStateRunning.textContent = cmd.isRunning ? 'running' : 'idle';
-    terminalStateRunning.className = `state-tag ${cmd.isRunning ? 'running' : ''}`;
-    const exitDisplay = cmd.lastExitCode !== null ? String(cmd.lastExitCode) : cmd.lastCommand ? 'unknown' : '-';
-    terminalStateExitCode.textContent = `exit: ${exitDisplay}`;
-    terminalStateExitCode.className = 'state-tag';
+    terminalStateCommand.textContent = cmd.lastDispatchedCommand || '-';
+    terminalStateDispatch.textContent = cmd.dispatched ? 'dispatching' : cmd.lastDispatchedCommand ? 'sent' : 'no dispatch';
+    terminalStateDispatch.className = `state-tag ${cmd.dispatched ? 'dispatching' : ''}`;
   } else {
     terminalStateCommand.textContent = '-';
-    terminalStateRunning.textContent = 'idle';
-    terminalStateRunning.className = 'state-tag';
-    terminalStateExitCode.textContent = 'exit: -';
-    terminalStateExitCode.className = 'state-tag';
+    terminalStateDispatch.textContent = 'no dispatch';
+    terminalStateDispatch.className = 'state-tag';
   }
+
+  terminalStatePid.textContent = session.pid ? `PID ${session.pid}` : '-';
+  terminalStatePid.className = 'state-tag';
+  terminalStateDims.textContent = session.cols && session.rows ? `${session.cols}x${session.rows}` : '-';
+  terminalStateDims.className = 'state-tag';
 }
 
 // ─── Task & Log Rendering ───────────────────────────────────────────────────
 
 function renderTasks(tasks: any[], activeId: string | null): void {
-  if (tasks.length === 0) { taskList.innerHTML = '<div class="empty-state">No tasks yet</div>'; return; }
+  if (tasks.length === 0) { taskList.innerHTML = '<div class="empty-state">No tasks yet</div>'; taskList.classList.add('collapsed'); return; }
+  taskList.classList.remove('collapsed');
   taskList.innerHTML = tasks.slice().reverse().map((t: any) => {
     const isActive = t.id === activeId;
     return `<div class="task-item ${isActive ? 'active' : ''}"><span class="task-status ${t.status}"></span><span class="task-title">${escapeHtml(t.title)}</span><span class="task-time">${formatTime(t.createdAt)}</span></div>`;
@@ -268,21 +340,6 @@ function renderLogs(logs: any[]): void {
     logStream.appendChild(el);
   }
   lastLogCount = logs.length; logStream.scrollTop = logStream.scrollHeight;
-}
-
-function renderTerminalPanel(state: any): void {
-  const session = state.terminalSession?.session;
-  if (!session) { termPanelDot.className = 'status-dot idle'; termPanelStatus.textContent = 'No session'; termPanelMeta.textContent = ''; return; }
-  const dotMap: Record<string, string> = { idle: 'idle', starting: 'running', running: 'running', exited: 'error', error: 'error' };
-  termPanelDot.className = `status-dot ${dotMap[session.status] || 'idle'}`;
-  termPanelStatus.textContent = session.status.charAt(0).toUpperCase() + session.status.slice(1);
-  const parts: string[] = [];
-  if (session.shell) parts.push(session.shell);
-  if (session.pid) parts.push(`PID ${session.pid}`);
-  if (session.cols && session.rows) parts.push(`${session.cols}x${session.rows}`);
-  if (session.persistent) parts.push('persistent');
-  else parts.push('no persistence');
-  termPanelMeta.textContent = parts.join(' | ');
 }
 
 // ─── Action Rendering (split: active + recent) ─────────────────────────────
@@ -309,6 +366,13 @@ function renderSplitActions(records: any[]): void {
 
   activeActionsCount.textContent = String(active.length);
   recentActionsCount.textContent = String(recent.length);
+
+  // Auto-collapse when empty, auto-expand when non-empty
+  if (active.length === 0) {
+    activeActionsPanel.classList.add('collapsed');
+  } else {
+    activeActionsPanel.classList.remove('collapsed');
+  }
 
   if (active.length === 0) {
     activeActionsList.innerHTML = '<div class="empty-state">No active actions</div>';
@@ -370,6 +434,13 @@ function patchActionInSplit(record: any): void {
   activeActionsCount.textContent = String(activeCount);
   recentActionsCount.textContent = String(recentCount);
 
+  // Auto-collapse/expand active panel based on content
+  if (activeCount === 0) {
+    activeActionsPanel.classList.add('collapsed');
+  } else {
+    activeActionsPanel.classList.remove('collapsed');
+  }
+
   // Restore empty state if list is now empty
   if (activeActionsList.children.length === 0) {
     activeActionsList.innerHTML = '<div class="empty-state">No active actions</div>';
@@ -386,7 +457,6 @@ function renderState(state: any): void {
   taskSummary.textContent = active ? `Active: ${active.title}` : 'No active task';
   renderTasks(state.tasks, state.activeTaskId);
   renderLogs(state.logs);
-  renderTerminalPanel(state);
   renderBrowserSurfaceState(state);
   renderTerminalSurfaceState(state);
 
@@ -412,7 +482,83 @@ workspaceAPI.browser.onStateUpdate((bs: any) => {
   renderBrowserSurfaceState({ browserRuntime: bs });
 });
 
-termRestartBtn.addEventListener('click', async () => { termRestartBtn.disabled = true; try { await workspaceAPI.actions.submit({ target: 'terminal', kind: 'terminal.restart', payload: {} }); } finally { termRestartBtn.disabled = false; } });
+// Click-to-copy tab IDs in browser state panel
+browserStateTabs.addEventListener('click', (e: Event) => {
+  const target = e.target as HTMLElement;
+  const chip = target.closest('[data-copy-id]') as HTMLElement | null;
+  if (!chip) return;
+  const id = chip.getAttribute('data-copy-id')!;
+  navigator.clipboard.writeText(id).then(() => {
+    chip.classList.add('copied');
+    setTimeout(() => chip.classList.remove('copied'), 1200);
+  });
+});
+
+// ─── Sidebar ───────────────────────────────────────────────────────────────
+
+function sidebarOpen(): void {
+  logSidebar.classList.add('open');
+  sidebarToggleBtn.classList.add('active');
+}
+
+function sidebarClose(): void {
+  logSidebar.classList.remove('open');
+  sidebarToggleBtn.classList.remove('active');
+}
+
+function sidebarToggle(): void {
+  if (logSidebar.classList.contains('open') || logSidebar.classList.contains('pinned')) {
+    sidebarClose();
+    sidebarUnpin();
+  } else {
+    sidebarOpen();
+  }
+}
+
+function sidebarPin(): void {
+  logSidebar.classList.add('pinned', 'open');
+  sidebarPinBtn.classList.add('active');
+  sidebarToggleBtn.classList.add('active');
+  localStorage.setItem('v1-sidebar-pinned', '1');
+}
+
+function sidebarUnpin(): void {
+  logSidebar.classList.remove('pinned');
+  sidebarPinBtn.classList.remove('active');
+  localStorage.removeItem('v1-sidebar-pinned');
+}
+
+function sidebarTogglePin(): void {
+  if (logSidebar.classList.contains('pinned')) {
+    sidebarUnpin();
+  } else {
+    sidebarPin();
+  }
+}
+
+sidebarToggleBtn.addEventListener('click', sidebarToggle);
+sidebarPinBtn.addEventListener('click', sidebarTogglePin);
+sidebarCloseBtn.addEventListener('click', () => { sidebarClose(); sidebarUnpin(); });
+
+// Restore pinned state from localStorage
+if (localStorage.getItem('v1-sidebar-pinned') === '1') {
+  sidebarPin();
+}
+
+// ─── Collapsible Sections ──────────────────────────────────────────────────
+
+function togglePanel(panel: HTMLElement): void {
+  panel.classList.toggle('collapsed');
+}
+
+activeActionsHeader.addEventListener('click', () => togglePanel(activeActionsPanel));
+recentActionsHeader.addEventListener('click', () => togglePanel(recentActionsPanel));
+taskList.addEventListener('click', (e: Event) => {
+  const target = e.target as HTMLElement;
+  if (target === taskList) {
+    togglePanel(taskList);
+  }
+});
 
 // ─── Init ───────────────────────────────────────────────────────────────────
 
