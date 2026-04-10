@@ -1,0 +1,71 @@
+import { AppState } from '../../shared/types/appState';
+import { Action, ActionType } from './actions';
+
+export function appReducer(state: AppState, action: Action): AppState {
+  switch (action.type) {
+    case ActionType.SET_WINDOW_BOUNDS:
+      return {
+        ...state,
+        windows: {
+          ...state.windows,
+          [action.role]: {
+            ...state.windows[action.role],
+            bounds: action.bounds,
+            displayId: action.displayId,
+          },
+        },
+      };
+
+    case ActionType.SET_WINDOW_FOCUSED: {
+      const updated = { ...state.windows };
+      for (const role of Object.keys(updated) as Array<keyof typeof updated>) {
+        updated[role] = { ...updated[role], isFocused: role === action.role && action.isFocused };
+      }
+      return { ...state, windows: updated };
+    }
+
+    case ActionType.SET_WINDOW_VISIBLE:
+      return {
+        ...state,
+        windows: {
+          ...state.windows,
+          [action.role]: { ...state.windows[action.role], isVisible: action.isVisible },
+        },
+      };
+
+    case ActionType.SET_LAYOUT_PRESET:
+      return { ...state, layoutPreset: action.preset };
+
+    case ActionType.ADD_TASK:
+      return {
+        ...state,
+        tasks: [...state.tasks, action.task],
+        activeTaskId: action.task.id,
+      };
+
+    case ActionType.UPDATE_TASK:
+      return {
+        ...state,
+        tasks: state.tasks.map((t) =>
+          t.id === action.taskId ? { ...t, ...action.updates } : t
+        ),
+      };
+
+    case ActionType.SET_ACTIVE_TASK:
+      return { ...state, activeTaskId: action.taskId };
+
+    case ActionType.ADD_LOG: {
+      const logs = [...state.logs, action.log];
+      return { ...state, logs: logs.length > 500 ? logs.slice(-500) : logs };
+    }
+
+    case ActionType.SET_SURFACE_STATUS:
+      return { ...state, [action.surface]: action.status };
+
+    case ActionType.REPLACE_STATE:
+      return action.state;
+
+    default:
+      return state;
+  }
+}
