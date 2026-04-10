@@ -36,7 +36,21 @@ export class SurfaceExecutionController {
     this.execute(action).catch(() => {});
   }
 
-  private enqueue(action: SurfaceAction, _policy: ActionConcurrencyPolicy): void {
+  private enqueue(action: SurfaceAction, policy: ActionConcurrencyPolicy): void {
+    if (policy.replacesSameKind) {
+      const superseded: SurfaceAction[] = [];
+      this.queue = this.queue.filter(queued => {
+        if (queued.kind === action.kind) {
+          superseded.push(queued);
+          return false;
+        }
+        return true;
+      });
+      for (const old of superseded) {
+        this.onPolicyFail(old, `Superseded by newer ${action.kind}`);
+      }
+    }
+
     this.queue.push(action);
     if (this.active === null) {
       this.drain();

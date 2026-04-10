@@ -175,3 +175,81 @@ describe('SurfaceExecutionController — bypass', () => {
     expect(callArgs).toContain('sa_2');
   });
 });
+
+const SERIALIZE_REPLACE: ActionConcurrencyPolicy = { mode: 'serialize', replacesSameKind: true };
+
+describe('SurfaceExecutionController — replacesSameKind', () => {
+  let executeFn: ReturnType<typeof vi.fn>;
+  let onFail: ReturnType<typeof vi.fn>;
+  let controller: SurfaceExecutionController;
+
+  beforeEach(() => {
+    executeFn = vi.fn();
+    onFail = vi.fn();
+    controller = new SurfaceExecutionController('browser', executeFn, onFail);
+  });
+
+  it('supersedes queued action of same kind', async () => {
+    let resolveFirst!: () => void;
+    executeFn.mockImplementationOnce(() => new Promise<void>(r => { resolveFirst = r; }));
+    executeFn.mockResolvedValueOnce(undefined);
+
+    const a1 = makeAction({ id: 'sa_1', kind: 'browser.navigate' });
+    const a2 = makeAction({ id: 'sa_2', kind: 'browser.navigate' });
+    const a3 = makeAction({ id: 'sa_3', kind: 'browser.navigate' });
+
+    controller.submit(a1, SERIALIZE_REPLACE); // runs immediately
+    controller.submit(a2, SERIALIZE_REPLACE); // queued
+    controller.submit(a3, SERIALIZE_REPLACE); // replaces a2
+
+    // a2 should have been failed via onPolicyFail
+    expect(onFail).toHaveBeenCalledTimes(1);
+    expect(onFail).toHaveBeenCalledWith(a2, 'Superseded by newer browser.navigate');
+
+    // Queue should have only a3
+    expect(controller.getQueueLength()).toBe(1);
+
+    // Complete a1 — a3 should drain (not a2)
+    resolveFirst();
+    await vi.waitFor(() => expect(executeFn).toHaveBeenCalledTimes(2));
+    expect(executeFn).toHaveBeenCalledWith(a3);
+  });
+
+  it('does not supersede running action', async () => {
+    let resolveFirst!: () => void;
+    executeFn.mockImplementationOnce(() => new Promise<void>(r => { resolveFirst = r; }));
+    executeFn.mockResolvedValueOnce(undefined);
+
+    const a1 = makeAction({ id: 'sa_1', kind: 'browser.navigate' });
+    const a2 = makeAction({ id: 'sa_2', kind: 'browser.navigate' });
+
+    controller.submit(a1, SERIALIZE_REPLACE); // runs
+    controller.submit(a2, SERIALIZE_REPLACE); // queued (a1 is running, not queued)
+
+    // a1 should NOT be failed — it's running
+    expect(onFail).not.toHaveBeenCalled();
+    expect(controller.getActive()?.id).toBe('sa_1');
+
+    resolveFirst();
+    await vi.waitFor(() => expect(executeFn).toHaveBeenCalledTimes(2));
+  });
+
+  it('does not supersede queued actions of different kind', async () => {
+    let resolveFirst!: () => void;
+    executeFn.mockImplementationOnce(() => new Promise<void>(r => { resolveFirst = r; }));
+    executeFn.mockResolvedValue(undefined);
+
+    const a1 = makeAction({ id: 'sa_1', kind: 'browser.navigate' });
+    const a2 = makeAction({ id: 'sa_2', kind: 'browser.create-tab' });
+    const a3 = makeAction({ id: 'sa_3', kind: 'browser.navigate' });
+
+    controller.submit(a1, SERIALIZE_REPLACE);       // runs
+    controller.submit(a2, { mode: 'serialize' });    // queued (different kind)
+    controller.submit(a3, SERIALIZE_REPLACE);         // queued — does NOT replace a2
+
+    expect(onFail).not.toHaveBeenCalled();
+    expect(controller.getQueueLength()).toBe(2);
+
+    resolveFirst();
+  });
+});
